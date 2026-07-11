@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>ADMIN — 전성훈</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css');
+:root{
+  --bg:#0F1126; --card:#191C3D; --card2:#22264F; --line:#2E3260;
+  --text:#F2F1FA; --dim:#A6A4C6;
+  --gold:#FFC93C; --hp:#52D273; --mp:#5CA8FF; --red:#FF5B5B;
+  --pixel:'Press Start 2P',monospace;
+}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--text);font-family:'Pretendard Variable',Pretendard,-apple-system,sans-serif;font-size:15px;line-height:1.7;-webkit-font-smoothing:antialiased}
+.wrap{max-width:560px;margin:0 auto;padding:36px 18px 80px}
+.eyebrow{text-align:center;font-family:var(--pixel);font-size:9px;color:var(--gold);letter-spacing:3px;margin-bottom:22px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 18px;margin-bottom:18px}
+.sechead{display:flex;align-items:baseline;gap:10px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.sechead h2{font-size:17px;font-weight:800}
+.sechead .en{font-family:var(--pixel);font-size:8px;letter-spacing:1.5px;color:var(--gold)}
+button{font-family:inherit;background:var(--gold);color:#17182E;border:none;border-radius:9px;padding:11px 18px;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 3px 0 rgba(0,0,0,.45)}
+button:active{transform:translateY(3px);box-shadow:none}
+button:disabled{background:var(--card2);color:var(--dim);box-shadow:none;cursor:default}
+button.sm{padding:7px 12px;font-size:12.5px}
+input,select{font-family:inherit;background:var(--card2);border:1.5px solid var(--line);border-radius:9px;color:var(--text);padding:11px 13px;font-size:14.5px;outline:none}
+input:focus,select:focus{border-color:var(--gold)}
+.row{display:flex;gap:8px}
+.row input{flex:1;min-width:0}
+.hide{display:none!important}
+.dim{color:var(--dim)}
+/* 지표 그리드 */
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:14px}
+.stat .k{font-size:12px;color:var(--dim);margin-bottom:2px}
+.stat .v{font-size:26px;font-weight:800;letter-spacing:-.5px}
+.stat .s{font-size:11.5px;color:var(--dim)}
+.stat.hl .v{color:var(--gold)}
+/* 구독자 카드 */
+.sub{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:13px 14px;margin-bottom:10px}
+.sub .top{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.sub .nm{font-weight:800;font-size:15px}
+.sub .time{font-size:11px;color:var(--dim);flex-shrink:0}
+.sub .meta{font-size:13px;color:var(--dim);margin-top:2px;word-break:break-all}
+.sub .intro{font-size:13.5px;margin-top:6px;padding-top:6px;border-top:1px dashed var(--line)}
+.sub .ctrl{display:flex;gap:8px;align-items:center;margin-top:10px}
+.sub select{padding:8px 10px;font-size:13.5px}
+.sub .saved{font-size:12px;color:var(--hp);font-weight:700}
+.chip{font-family:var(--pixel);font-size:8px;border-radius:6px;padding:4px 7px}
+.chip.t1{color:#17182E;background:var(--gold)}
+.chip.t2{color:#17182E;background:#C8CCE8}
+.chip.t3{color:#fff;background:#B07A4A}
+.chip.t4{color:var(--text);background:var(--line)}
+.msg{text-align:center;font-size:13.5px;color:var(--dim);padding:14px 0}
+.err{color:var(--red)}
+.toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">— ADMIN CONSOLE —</div>
+
+  <!-- 로그인 -->
+  <div class="card" id="login">
+    <div class="sechead"><h2>관리자 인증</h2><span class="en">AUTH</span></div>
+    <div class="row">
+      <input id="keyinput" type="password" placeholder="관리자 키 입력" onkeydown="if(event.key==='Enter')unlock()">
+      <button onclick="unlock()" style="flex-shrink:0">입장</button>
+    </div>
+    <div class="msg err hide" id="loginerr">키가 올바르지 않거나 서버 연결에 실패했습니다.</div>
+  </div>
+
+  <!-- 대시보드 -->
+  <div id="dash" class="hide">
+    <div class="card">
+      <div class="sechead"><h2>퍼포먼스</h2><span class="en">METRICS</span></div>
+      <div class="stats">
+        <div class="stat"><div class="k">총 방문</div><div class="v" id="m-vt">-</div><div class="s">오늘 <span id="m-vd">-</span></div></div>
+        <div class="stat"><div class="k">총 구독 (전환)</div><div class="v" id="m-st">-</div><div class="s">오늘 <span id="m-sd">-</span></div></div>
+        <div class="stat hl"><div class="k">전환율</div><div class="v" id="m-cvr">-</div><div class="s">구독 ÷ 방문</div></div>
+        <div class="stat"><div class="k">촌수 분포</div><div class="v" id="m-chon" style="font-size:15px;line-height:1.9">-</div></div>
+      </div>
+      <div class="msg" style="padding-bottom:0" id="tips"></div>
+    </div>
+
+    <div class="card">
+      <div class="toolbar">
+        <div class="sechead" style="border:none;padding:0;margin:0"><h2>구독자 관리</h2><span class="en">SUBSCRIBERS</span></div>
+        <button class="sm" onclick="loadData()">새로고침</button>
+      </div>
+      <div id="sublist"><div class="msg">불러오는 중...</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SHEET_URL="https://script.google.com/macros/s/AKfycbye5D6SApY7SnJKtTrZlvkDLotfOO7ZKepHr0Az9Zp-vZPk6qc3zpORHObUgj6YFl6hug/exec";
+let KEY="";
+
+async function unlock(){
+  KEY=document.getElementById("keyinput").value.trim();
+  document.getElementById("loginerr").classList.add("hide");
+  const ok=await loadData();
+  if(ok){
+    document.getElementById("login").classList.add("hide");
+    document.getElementById("dash").classList.remove("hide");
+  }else{
+    document.getElementById("loginerr").classList.remove("hide");
+  }
+}
+
+async function loadData(){
+  try{
+    const r=await fetch(SHEET_URL+"?key="+encodeURIComponent(KEY));
+    const d=await r.json();
+    if(d.error)return false;
+    render(d);
+    return true;
+  }catch(e){return false;}
+}
+
+function render(d){
+  document.getElementById("m-vt").textContent=d.visitsTotal;
+  document.getElementById("m-vd").textContent="+"+d.visitsToday;
+  document.getElementById("m-st").textContent=d.subsTotal;
+  document.getElementById("m-sd").textContent="+"+d.subsToday;
+  const cvr=d.visitsTotal>0?(d.subsTotal/d.visitsTotal*100):0;
+  document.getElementById("m-cvr").textContent=cvr.toFixed(1)+"%";
+
+  // 촌수 분포
+  const dist={1:0,2:0,3:0,4:0};
+  d.subscribers.forEach(s=>{const c=parseInt(s.chon)||4;dist[c]=(dist[c]||0)+1;});
+  document.getElementById("m-chon").innerHTML=
+    `<span class="chip t1">1촌 ${dist[1]}</span> <span class="chip t2">2촌 ${dist[2]}</span><br><span class="chip t3">3촌 ${dist[3]}</span> <span class="chip t4">4촌 ${dist[4]}</span>`;
+
+  // 코멘트
+  const tips=document.getElementById("tips");
+  if(d.visitsTotal<30)tips.textContent="표본이 아직 작아요. 방문 30 이상부터 전환율을 신뢰하세요.";
+  else if(cvr>=15)tips.textContent="전환율 15%↑ — 랜딩 훌륭합니다. 이제 트래픽(QR 배포)에 집중하세요.";
+  else if(cvr>=5)tips.textContent="전환율 5~15% — 준수합니다. 구독 혜택 멘트 A/B 테스트 여지 있음.";
+  else tips.textContent="전환율 5% 미만 — 구독 가치 제안(왜 구독해야 하는지)을 보강해보세요.";
+
+  // 구독자 리스트 (최신순)
+  const list=document.getElementById("sublist");
+  if(d.subscribers.length===0){list.innerHTML='<div class="msg">아직 구독자가 없습니다.</div>';return;}
+  list.innerHTML=d.subscribers.slice().reverse().map(s=>`
+    <div class="sub">
+      <div class="top"><span class="nm">${esc(s.name)}</span><span class="time">${esc(String(s.time).slice(0,16))}</span></div>
+      <div class="meta">${esc(s.phone)} · ${esc(s.job)}</div>
+      ${s.intro?`<div class="intro">${esc(s.intro)}</div>`:""}
+      <div class="ctrl">
+        <select id="chon-${s.row}">
+          ${[1,2,3,4].map(n=>`<option value="${n}" ${n==(parseInt(s.chon)||4)?"selected":""}>${n}촌</option>`).join("")}
+        </select>
+        <button class="sm" onclick="setChon(${s.row},this)">저장</button>
+        <span class="saved hide" id="ok-${s.row}">저장됨 ✓</span>
+      </div>
+    </div>`).join("");
+}
+
+async function setChon(row,btn){
+  btn.disabled=true;btn.textContent="...";
+  const chon=document.getElementById("chon-"+row).value;
+  const body=new URLSearchParams({type:"setchon",key:KEY,row,chon});
+  await fetch(SHEET_URL,{method:"POST",mode:"no-cors",body}).catch(()=>{});
+  btn.disabled=false;btn.textContent="저장";
+  const ok=document.getElementById("ok-"+row);
+  ok.classList.remove("hide");
+  setTimeout(()=>ok.classList.add("hide"),2000);
+}
+
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+</script>
+</body>
+</html>
