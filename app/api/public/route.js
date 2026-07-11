@@ -6,16 +6,21 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const client = sb();
-    const [{ data }, { count }] = await Promise.all([
+    const [{ data }, { count }, { data: notes }] = await Promise.all([
       client
         .from("subscribers")
         .select("job,intro,chon")
         .eq("approved", true)
         .order("created_at", { ascending: true }),
       client.from("subscribers").select("*", { count: "exact", head: true }),
+      client
+        .from("patchnotes")
+        .select("id,created_at,version,content")
+        .order("created_at", { ascending: false })
+        .limit(10),
     ]);
-    return NextResponse.json({ members: data || [], total: count || 0 });
+    return NextResponse.json({ members: data || [], total: count || 0, notes: notes || [] });
   } catch (e) {
-    return NextResponse.json({ members: [], total: 0 });
+    return NextResponse.json({ members: [], total: 0, notes: [] });
   }
 }

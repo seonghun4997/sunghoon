@@ -46,6 +46,7 @@ export default function Home() {
   const [members, setMembers] = useState([]);
   const [total, setTotal] = useState(null);
   const [open4, setOpen4] = useState(false);
+  const [notes, setNotes] = useState([]);
   const [subOpen, setSubOpen] = useState(false);
   const [subDone, setSubDone] = useState(false);
   const [sending, setSending] = useState(false);
@@ -76,17 +77,22 @@ export default function Home() {
 
   // 방문 집계 (세션당 1회) + 승인된 구독자 로드
   useEffect(() => {
+    const src = new URLSearchParams(location.search).get("src");
+    const ping = () =>
+      fetch("/api/visit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ src }),
+      }).catch(() => {});
     try {
       if (!sessionStorage.getItem("visited")) {
         sessionStorage.setItem("visited", "1");
-        fetch("/api/visit", { method: "POST" }).catch(() => {});
+        ping();
       }
-    } catch (e) {
-      fetch("/api/visit", { method: "POST" }).catch(() => {});
-    }
+    } catch (e) { ping(); }
     fetch("/api/public")
       .then((r) => r.json())
-      .then((d) => { setMembers(d.members || []); setTotal(d.total ?? 0); })
+      .then((d) => { setMembers(d.members || []); setTotal(d.total ?? 0); setNotes(d.notes || []); })
       .catch(() => {});
   }, []);
 
@@ -119,7 +125,7 @@ export default function Home() {
   }
 
   async function shareLink() {
-    const url = location.href;
+    const url = location.origin + "/?src=share";
     if (navigator.share) {
       try {
         await navigator.share({ title: "전성훈 — 은둔형 연쇄창업가", text: "야생의 전성훈을 만나보세요", url });
@@ -282,6 +288,23 @@ export default function Home() {
             </div>
           ))}
         </section>
+
+        {/* 패치노트 */}
+        {notes.length > 0 && (
+          <section className="card">
+            <div className="sechead"><h2>패치노트</h2><span className="en">PATCH NOTES</span></div>
+            <div className="desc">전성훈의 최근 업데이트 내역입니다.</div>
+            {notes.map((n) => (
+              <div className="pnote" key={n.id}>
+                <span className="ver">{n.version}</span>
+                <div style={{ minWidth: 0 }}>
+                  <div className="pn-c">{n.content}</div>
+                  <div className="pn-d">{String(n.created_at).slice(0, 10)}</div>
+                </div>
+              </div>
+            ))}
+          </section>
+        )}
 
         {/* 구독 */}
         <section className="card">

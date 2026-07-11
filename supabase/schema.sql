@@ -18,3 +18,14 @@ create table if not exists visits (
 
 alter table subscribers enable row level security;
 alter table visits enable row level security;
+
+-- v2 추가분: 유입 경로 + 패치노트
+alter table visits add column if not exists src text;
+
+create table if not exists patchnotes (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz default now(),
+  version text not null,
+  content text not null
+);
+alter table patchnotes enable row level security;

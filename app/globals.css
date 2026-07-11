@@ -108,6 +108,12 @@ body{
 .codex .t{font-size:13px;font-weight:600;line-height:1.5}
 .codex .st{margin-left:auto;font-size:12px;flex-shrink:0;opacity:.65}
 
+/* 패치노트 */
+.pnote{display:flex;align-items:flex-start;gap:12px;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:11px 14px;margin-bottom:8px}
+.pnote .ver{flex-shrink:0;font-family:var(--pixel);font-size:9px;color:#17182E;background:var(--gold);border-radius:6px;padding:5px 8px;margin-top:2px}
+.pnote .pn-c{font-size:14px;font-weight:600;line-height:1.6}
+.pnote .pn-d{font-size:11.5px;color:var(--dim);margin-top:2px}
+
 /* 버튼/입력 */
 button{font-family:inherit;background:var(--gold);color:#17182E;border:none;border-radius:10px;padding:14px 22px;font-size:15px;font-weight:800;cursor:pointer;letter-spacing:-.2px;box-shadow:0 3px 0 rgba(0,0,0,.45)}
 button:active{transform:translateY(3px);box-shadow:none}
