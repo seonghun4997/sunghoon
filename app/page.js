@@ -44,6 +44,8 @@ const DLG = "어? 야생의 전성훈이 나타났다!";
 export default function Home() {
   const [dlg, setDlg] = useState("");
   const [members, setMembers] = useState([]);
+  const [total, setTotal] = useState(null);
+  const [open4, setOpen4] = useState(false);
   const [subOpen, setSubOpen] = useState(false);
   const [subDone, setSubDone] = useState(false);
   const [sending, setSending] = useState(false);
@@ -84,7 +86,7 @@ export default function Home() {
     }
     fetch("/api/public")
       .then((r) => r.json())
-      .then((d) => setMembers(d.members || []))
+      .then((d) => { setMembers(d.members || []); setTotal(d.total ?? 0); })
       .catch(() => {});
   }, []);
 
@@ -227,13 +229,35 @@ export default function Home() {
           {NET.map(([chon, rule, people]) => {
             const dyn = membersOf(chon);
             const all = [...people, ...dyn.map((m) => ["🙋", m.job, m.intro || ""])];
+            if (chon === 4) {
+              return (
+                <div className="chon" key={chon}>
+                  <div className="chonhead"><span className={`n t${chon}`}>4촌</span><span className="r">{rule}</span></div>
+                  <button className="fold" onClick={() => setOpen4(!open4)}>
+                    🙋 구독자 {total === null ? "-" : total}명 <span style={{ color: "var(--dim)", fontWeight: 400 }}>· {open4 ? "접기 ▲" : "눌러서 보기 ▼"}</span>
+                  </button>
+                  {open4 && (
+                    all.length === 0 ? (
+                      <div className="empty" style={{ marginTop: 8 }}>승인된 구독자가 표시되는 자리입니다</div>
+                    ) : (
+                      <div style={{ marginTop: 8 }}>
+                        {all.map(([ic, nm, ds], i) => (
+                          <div className="person" key={"4-" + i}>
+                            <span className="ic">{ic}</span>
+                            <div><div className="nm">{nm}</div><div className="ds">{ds}</div></div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  )}
+                </div>
+              );
+            }
             return (
               <div className="chon" key={chon}>
                 <div className="chonhead"><span className={`n t${chon}`}>{chon}촌</span><span className="r">{rule}</span></div>
                 {all.length === 0 ? (
-                  <div className="empty">
-                    {chon === 4 ? "아직 없음 — 구독 승인 시 여기 등록됩니다" : "빈 슬롯 — 현재 모집중"}
-                  </div>
+                  <div className="empty">빈 슬롯 — 현재 모집중</div>
                 ) : (
                   all.map(([ic, nm, ds], i) => (
                     <div className="person" key={chon + "-" + i}>
@@ -262,7 +286,12 @@ export default function Home() {
         {/* 구독 */}
         <section className="card">
           <div className="sechead"><h2>구독</h2><span className="en" style={{ color: "var(--mp)" }}>SUBSCRIBE</span></div>
-          <div className="desc">새 사업 소식과 인맥 업데이트를 문자로 보내드립니다. 신청 후 <b style={{ color: "var(--mp)" }}>승인되면 4촌</b>에 등록됩니다.</div>
+          <div className="desc">
+            새 사업 소식과 인맥 업데이트를 문자로 보내드립니다. 신청 후 <b style={{ color: "var(--mp)" }}>승인되면 4촌</b>에 등록됩니다.
+            {total !== null && total > 0 && (
+              <><br />현재 <b style={{ color: "var(--mp)" }}>{total}명</b>이 구독중입니다.</>
+            )}
+          </div>
           <div style={{ textAlign: "center" }}>
             <button className="mp" onClick={() => { setSubOpen(true); setSubDone(false); }}>📡 구독하고 4촌 되기</button>
           </div>
