@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 840" font-family="-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Pretendard','Malgun Gothic',sans-serif">
+  <!-- 화이트 커버 -->
+  <rect width="600" height="840" fill="#FFFFFF"/>
+  <!-- 책등 음영 -->
+  <rect width="22" height="840" fill="#25315C" opacity="0.06"/>
+  <!-- 상단 임프린트 -->
+  <text x="300" y="118" text-anchor="middle" fill="#9AA3B2" font-size="19" font-weight="700" letter-spacing="7">COMMERLAB</text>
+  <!-- 타이틀 -->
+  <text x="300" y="330" text-anchor="middle" fill="#25315C" font-size="82" font-weight="800" letter-spacing="-2.5">메타광고</text>
+  <text x="300" y="428" text-anchor="middle" fill="#25315C" font-size="82" font-weight="800" letter-spacing="-2.5">스케일업 실전</text>
+  <!-- 서브타이틀 -->
+  <text x="300" y="512" text-anchor="middle" fill="#A6AFBC" font-size="26" font-weight="600" letter-spacing="-0.5">일예산 300만원 이상</text>
+  <text x="300" y="550" text-anchor="middle" fill="#A6AFBC" font-size="26" font-weight="600" letter-spacing="-0.5">현장의 판단 기준</text>
+  <!-- 하단 저자 -->
+  <text x="300" y="760" text-anchor="middle" fill="#B4BCC8" font-size="21" font-weight="700" letter-spacing="5">WOONOE · 2026</text>
+</svg>
