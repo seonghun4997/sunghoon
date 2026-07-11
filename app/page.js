@@ -149,21 +149,9 @@ export default function Home() {
         {/* 캐릭터 */}
         <section className="card">
           <div className="hero">
-            <div className="hero-left">
-              <div className="sprite-box">
-                <img src="/profile.jpg" alt="전성훈" width={126} height={126} />
-                <div className="lv">LV.25</div>
-              </div>
-              <div className="barwrap">
-                <div className="barhead"><span className="lb" style={{ color: "#FF5B5B" }}>HP</span><span className="val">13/100</span></div>
-                <div className="bar"><div className="hp-crit" style={{ width: "13%", background: "#FF5B5B" }} /></div>
-                <div className="cap">툭 치면 과로사 직전</div>
-              </div>
-              <div className="barwrap">
-                <div className="barhead"><span className="lb" style={{ color: "var(--mp)" }}>MP</span><span className="val">100/100</span></div>
-                <div className="bar"><div style={{ width: "100%", background: "var(--mp)" }} /></div>
-                <div className="cap">아이디어 — 무한 리젠</div>
-              </div>
+            <div className="sprite-box">
+              <img src="/profile.jpg" alt="전성훈" width={126} height={126} />
+              <div className="lv">LV.25</div>
             </div>
             <div style={{ minWidth: 0, paddingTop: 4 }}>
               <div className="title-chip">«성북동의 은둔자»</div>
@@ -171,6 +159,16 @@ export default function Home() {
               <div className="sub">은둔형 연쇄창업가</div>
               <div className="tagline">혼자 사업 8개 굴리는 중</div>
             </div>
+          </div>
+          <div className="barwrap">
+            <div className="barhead"><span className="lb" style={{ color: "#FF5B5B" }}>HP</span><span className="val">13 / 100</span></div>
+            <div className="bar"><div className="hp-crit" style={{ width: "13%", background: "#FF5B5B" }} /></div>
+            <div className="cap">툭 치면 과로사 직전</div>
+          </div>
+          <div className="barwrap">
+            <div className="barhead"><span className="lb" style={{ color: "var(--mp)" }}>MP</span><span className="val">100 / 100</span></div>
+            <div className="bar"><div style={{ width: "100%", background: "var(--mp)" }} /></div>
+            <div className="cap">아이디어 — 무한 리젠</div>
           </div>
         </section>
 
