@@ -30,15 +30,6 @@ const NET = [
   [4, "사적으로 1~3회 만났거나, 구독 신청한 사람", []],
 ];
 
-const TMI = [
-  "은둔형인데 어쩌다 미팅을 받게 됐는지",
-  "성북동 은둔자의 단골 밥집",
-  "휴학은 대체 몇 번째인지",
-  "INTP가 영업 2점으로 살아남는 법",
-  "요즘 새벽마다 꽂혀있는 것",
-  "사주 플랫폼 대표가 본 자기 사주",
-];
-
 const DLG = "어? 야생의 전성훈이 나타났다!";
 
 export default function Home() {
@@ -228,6 +219,23 @@ export default function Home() {
           <div className="note">🔒 지금 보고 계신 화면은 4촌(공개) 기준입니다</div>
         </section>
 
+        {/* 패치노트 */}
+        {notes.length > 0 && (
+          <section className="card">
+            <div className="sechead"><h2>패치노트</h2><span className="en">PATCH NOTES</span></div>
+            <div className="desc">전성훈의 최근 업데이트 내역입니다.</div>
+            {notes.map((n) => (
+              <div className="pnote" key={n.id}>
+                <span className="ver">{n.version}</span>
+                <div style={{ minWidth: 0 }}>
+                  <div className="pn-c">{n.content}</div>
+                  <div className="pn-d">{String(n.created_at).slice(0, 10)}</div>
+                </div>
+              </div>
+            ))}
+          </section>
+        )}
+
         {/* 인맥 */}
         <section className="card">
           <div className="sechead"><h2>인맥</h2><span className="en">NETWORK</span></div>
@@ -276,35 +284,6 @@ export default function Home() {
             );
           })}
         </section>
-
-        {/* TMI */}
-        <section className="card">
-          <div className="sechead"><h2>TMI</h2><span className="en">LOCKED</span></div>
-          {TMI.map((t, i) => (
-            <div className="codex" key={i}>
-              <span className="no">#{String(i + 1).padStart(2, "0")}</span>
-              <span className="t">{t}</span>
-              <span className="st">🔒</span>
-            </div>
-          ))}
-        </section>
-
-        {/* 패치노트 */}
-        {notes.length > 0 && (
-          <section className="card">
-            <div className="sechead"><h2>패치노트</h2><span className="en">PATCH NOTES</span></div>
-            <div className="desc">전성훈의 최근 업데이트 내역입니다.</div>
-            {notes.map((n) => (
-              <div className="pnote" key={n.id}>
-                <span className="ver">{n.version}</span>
-                <div style={{ minWidth: 0 }}>
-                  <div className="pn-c">{n.content}</div>
-                  <div className="pn-d">{String(n.created_at).slice(0, 10)}</div>
-                </div>
-              </div>
-            ))}
-          </section>
-        )}
 
         {/* 구독 */}
         <section className="card">
