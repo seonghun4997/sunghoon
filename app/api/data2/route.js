@@ -35,6 +35,7 @@ export async function GET() {
         configId: cfgRow?.id || null,
         configV: cfgRow?.v ?? null,
         configVia: cfgRow?.via || null,
+        configReadError: cfgRow?.readError || null,
         members,
         total: all.length,
         notes: notes || [],

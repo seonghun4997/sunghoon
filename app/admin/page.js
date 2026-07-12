@@ -15,6 +15,17 @@ function DiagLink() {
   );
 }
 
+
+// UTC 시각 문자열 → 한국시간(KST) 표시
+function fmtKST(iso, short) {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso);
+  const k = new Date(d.getTime() + 9 * 3600 * 1000);
+  const t = k.toISOString();
+  return (short ? t.slice(5, 16) : t.slice(0, 16)).replace("T", " ");
+}
+
 export default function Admin() {
   const [key, setKey] = useState("");
   const [authed, setAuthed] = useState(false);
@@ -30,6 +41,7 @@ export default function Admin() {
   const [cfg, setCfg] = useState(null);
   const [cfgDirty, setCfgDirty] = useState(false);
   const [cfgSavedAt, setCfgSavedAt] = useState(null);
+  const lastSavedVRef = useRef(null);
   const [cfgMsg, setCfgMsg] = useState("");
   const [live, setLive] = useState(null);   // 사이트가 지금 실제로 보여주는 값 (10초마다 자동 확인)
   const [liveAt, setLiveAt] = useState(null);
@@ -76,7 +88,11 @@ export default function Admin() {
       .then((r) => r.json())
       .then((d) => {
         if (d.config) {
-          setLive({ cfg: mergeConfig(d.config), dbHost: d.dbHost || "?", build: d.build || "?", updatedAt: d.configUpdatedAt || null, cfgV: d.configV ?? null, cfgVia: d.configVia || null });
+          setLive({ cfg: mergeConfig(d.config), dbHost: d.dbHost || "?", build: d.build || "?", updatedAt: d.configUpdatedAt || null, cfgV: d.configV ?? null, cfgVia: d.configVia || null, cfgErr: d.configReadError || null });
+          // ★ 증발 감지: 방금 #N으로 저장했는데 조회가 그보다 낮거나 없으면 즉시 경보
+          if (lastSavedVRef.current && (d.configV == null || Number(d.configV) < lastSavedVRef.current)) {
+            setCfgMsg("🚨 방금 저장한 #" + lastSavedVRef.current + "이 조회에서 사라졌습니다" + (d.configReadError ? " · 조회 오류: " + d.configReadError : "") + " — 이 화면과 /api/health 캡처를 함께 전달해주세요.");
+          }
           setLiveAt(new Date());
         }
       })
@@ -349,6 +365,7 @@ export default function Admin() {
     if (!r?.ok || !r?.saved) { setCfgMsg("❌ 저장 실패 — 잠시 후 다시 저장을 눌러주세요. 수정한 내용은 남아있습니다."); return; }
 
     baseAtRef.current = r.v ?? null; // 이제 이 버전 번호가 새 기준
+    lastSavedVRef.current = r.v ?? null;
     const back = mergeConfig(r.saved);
     const verified = JSON.stringify(canon(back)) === JSON.stringify(canon(mergeConfig(sentCfg)));
     setCfgSavedAt(r.at || null);
@@ -496,7 +513,7 @@ export default function Admin() {
                         {s.name}{" "}
                         <span className={`badge ${s.approved ? "y" : "n"}`}>{s.approved ? "승인됨" : "대기중"}</span>
                       </span>
-                      <span className="time">{String(s.created_at).slice(0, 16).replace("T", " ")}</span>
+                      <span className="time">{fmtKST(s.created_at)}</span>
                     </div>
                     <div className="meta">{s.phone}</div>
                     {/* ★ 표시 정보 직접 수정 — 사이트 인맥 칸에 노출되는 값 */}
@@ -545,7 +562,7 @@ export default function Admin() {
                   <span className="nm"><span className="chip t1" style={{ marginRight: 6 }}>{n.version}</span>{n.content}</span>
                   <button className="sm ghost" onClick={() => delNote(n.id)}>삭제</button>
                 </div>
-                <div className="meta">{String(n.created_at).slice(0, 10)}</div>
+                <div className="meta">{fmtKST(n.created_at).slice(0, 10)}</div>
               </div>
             ))}
           </div>
@@ -561,7 +578,7 @@ export default function Admin() {
               </div>
               <div className="adm-msg" style={{ padding: "0 0 10px", textAlign: "left" }}>
                 수정 후 <b>저장 &amp; 반영</b>을 누르세요. 저장은 디비에 기록된 걸 다시 읽어 검증까지 마친 뒤에만 성공으로 표시됩니다.
-                {cfgSavedAt && <> · 마지막 저장 {String(cfgSavedAt).slice(0, 16).replace("T", " ")}</>}
+                {cfgSavedAt && <> · 마지막 저장 {fmtKST(cfgSavedAt)} (한국시간)</>}
                 {cfgDirty && <b style={{ color: "var(--gold)" }}> · 저장 안 된 수정사항 있음</b>}
                 <br />{cfgMsg && (
                   <b style={{ color: cfgMsg.startsWith("✓") ? "var(--hp)" : "var(--red)" }}>
@@ -587,7 +604,7 @@ export default function Admin() {
                   <b style={{ color: "var(--gold)" }}>🔌 이 탭의 연결 상태</b>
                   <br />어드민 주소 <b>{typeof location !== "undefined" ? location.host : "?"}</b> · 서버 빌드 <b>{live.build}</b>
                   <br />연결된 디비 <b style={{ color: "var(--mp)" }}>{live.dbHost}</b>
-                  <br />설정 버전 <b style={{ color: "var(--gold)" }}>{live.cfgV != null ? "#" + live.cfgV : "#100(첫 저장 전)"}</b>{live.cfgVia ? <span style={{ opacity: 0.8 }}> ({live.cfgVia})</span> : null} · 디비 마지막 저장 <b>{live.updatedAt ? String(live.updatedAt).slice(0, 19).replace("T", " ") : "-"}</b> <span style={{ opacity: 0.7 }}>← 저장할 때마다 번호가 +1 되어야 정상</span>
+                  <br />설정 버전 <b style={{ color: "var(--gold)" }}>{live.cfgV != null ? "#" + live.cfgV : "#100(첫 저장 전)"}</b>{live.cfgVia ? <span style={{ opacity: 0.8 }}> ({live.cfgVia})</span> : null} · 디비 마지막 저장 <b>{fmtKST(live.updatedAt)}</b> <span style={{ opacity: 0.7 }}>← 저장할 때마다 번호가 +1 되어야 정상</span>{live.cfgErr ? <><br /><b style={{ color: "#ff6b6b" }}>⚠️ 설정 조회 오류: {live.cfgErr}</b></> : null}
                   <div style={{ borderTop: "1px dashed var(--line)", margin: "8px 0" }} />
                   <b style={{ color: "var(--gold)" }}>📡 사이트 실시간 값</b>
                   {liveAt && <span style={{ opacity: 0.6 }}> · {liveAt.toLocaleTimeString()} 확인 (10초마다 자동)</span>}

@@ -4,11 +4,20 @@ import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
+
+function kst(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso);
+  return new Date(d.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 19).replace("T", " ") + " (한국시간)";
+}
+
 export async function GET() {
   const url = process.env.SUPABASE_URL || "";
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
   const report = {
     빌드버전: BUILD + " — 사이트 하단의 BUILD 표시와 같아야 최신 배포입니다",
+    지금시각: kst(new Date().toISOString()),
     접속호스트: supabaseHost(),
     URL에_불필요한_꼬리있었음: url.trim() !== "https://" + supabaseHost(),
     SERVICE_KEY_형식정상: key.trim().startsWith("sb_secret_") || key.trim().startsWith("eyJ"),
@@ -25,26 +34,31 @@ export async function GET() {
       report.읽기[t] = error ? "❌ " + error.message : "✅";
     }
 
-    // ★★ v38: 새 저장소(config_journal) 자가테스트 — 이게 ✅면 설정 저장은 무조건 정상
+    // ★★ v40: 새 저장소 왕복 자가테스트 — 넣고→바로 읽고→지우는 전 과정을 낱낱이 보고
     try {
+      const steps = [];
       const { data: t, error: e1 } = await client
         .from("config_journal").insert({ v: 0, data: { probe: true } }).select("id").single();
-      if (e1) {
-        report.새저장소_테스트 = /does not exist|schema cache/i.test(e1.message)
-          ? "⚠️ 아직 테이블 없음 — SQL 1회 실행 필요 (임시 경로로는 저장되고 있음)"
-          : "❌ " + e1.message;
-      } else {
-        await client.from("config_journal").delete().eq("id", t.id);
-        report.새저장소_테스트 = "✅ 정상";
+      steps.push(e1 ? "쓰기 ❌ " + e1.message : "쓰기 ✅");
+      if (!e1) {
+        const { data: back, error: e2 } = await client
+          .from("config_journal").select("id").eq("id", t.id).maybeSingle();
+        steps.push(e2 ? "재조회 ❌ " + e2.message : back ? "재조회 ✅" : "재조회 ⚠️ 방금 쓴 행이 안 보임");
+        const { count, error: e3 } = await client
+          .from("config_journal").select("*", { count: "exact", head: true });
+        steps.push(e3 ? "개수 ❌ " + e3.message : "전체 행 " + count + "개");
+        const { error: e4 } = await client.from("config_journal").delete().eq("id", t.id);
+        steps.push(e4 ? "삭제 ❌ " + e4.message : "삭제 ✅");
       }
-    } catch (e) { report.새저장소_테스트 = "❌ " + String(e.message || e); }
+      report.새저장소_왕복테스트 = steps.join(" → ");
+    } catch (e) { report.새저장소_왕복테스트 = "❌ " + String(e.message || e); }
 
     // 설정 저장 이력 (최근 3개)
     try {
       const { data: js, error: je } = await client
         .from("config_journal").select("id,created_at,v").order("v", { ascending: false }).limit(3);
       if (je) report.설정저장_이력 = "❌ " + je.message;
-      else report.설정저장_이력 = (js || []).length === 0 ? "저장된 적 없음 (기본값 사용중 — 정상)" : (js || []).map((r) => "#" + r.v + " · " + String(r.created_at).slice(0, 19).replace("T", " "));
+      else report.설정저장_이력 = (js || []).length === 0 ? "저장된 적 없음 (기본값 사용중 — 정상)" : (js || []).map((r) => "#" + r.v + " · " + kst(r.created_at));
     } catch (e) { report.설정저장_이력 = "❌ " + String(e.message || e); }
 
     // 구독자 현황 — "승인했는데 4촌에 안 보여요" 진단용
@@ -63,7 +77,7 @@ export async function GET() {
 
     // 사이트 편집기 마지막 저장 시각
     const cfgRow = await readLatestConfig(client);
-    report.설정_마지막저장 = cfgRow?.updated_at || "아직 저장된 적 없음 (기본값 사용중)";
+    report.설정_마지막저장 = cfgRow?.updated_at ? kst(cfgRow.updated_at) : (cfgRow?.readError ? "❌ 조회 실패: " + cfgRow.readError : "아직 저장된 적 없음 (기본값 사용중)");
     report.설정_버전번호 = cfgRow?.v != null ? "#" + cfgRow.v : null;
     report.설정_저장경로 = cfgRow?.via || null;
 
