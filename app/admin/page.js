@@ -33,6 +33,7 @@ export default function Admin() {
   const [cfgMsg, setCfgMsg] = useState("");
   const frameRef = useRef(null);
   const genRef = useRef(0); // 편집 세대 카운터 — 저장 중 타이핑해도 안전하게
+  const cfgRef = useRef(null); // 항상 최신 편집 상태를 담는 참조 (한글 입력 버그 방지용)
 
   // 저장 안 된 수정사항이 있으면 창을 닫거나 새로고침할 때 경고
   useEffect(() => {
@@ -51,7 +52,7 @@ export default function Admin() {
       if (d.error) return false;
       setData(d);
       setEdits({});
-      if (d.config && !cfgDirty) setCfg(mergeConfig(d.config));
+      if (d.config && !cfgDirty) { cfgRef.current = mergeConfig(d.config); setCfg(cfgRef.current); }
       if (d.configUpdatedAt) setCfgSavedAt(d.configUpdatedAt);
       return true;
     } catch (e) { return false; }
@@ -124,7 +125,7 @@ export default function Admin() {
   }
 
   /* ── 사이트 편집기 헬퍼 ── */
-  const updateCfg = (next) => { genRef.current++; setCfg(next); setCfgDirty(true); };
+  const updateCfg = (next) => { genRef.current++; cfgRef.current = next; setCfg(next); setCfgDirty(true); };
   const setText = (k, v) => updateCfg({ ...cfg, texts: { ...cfg.texts, [k]: v } });
   const setGauge = (g, field, v) => updateCfg({ ...cfg, [g]: { ...cfg[g], [field]: v } });
   const moveSection = (i, dir) => {
@@ -219,8 +220,13 @@ export default function Admin() {
 
   async function saveConfig() {
     setCfgMsg("저장중...");
+    // ★ 한글 입력 버그 수정: 입력창에서 글자를 조합하는 중에 저장을 누르면
+    //    마지막 글자가 빠진 채 저장되는 문제 → 포커스를 해제해 글자를 강제 확정하고
+    //    잠깐 기다린 뒤, 가장 최신 편집 상태(cfgRef)를 저장한다
+    if (typeof document !== "undefined" && document.activeElement?.blur) document.activeElement.blur();
+    await new Promise((r) => setTimeout(r, 120));
     const gen = genRef.current;             // 저장 시작 시점의 편집 세대
-    const sentCfg = sanitizeCfg(cfg);       // 숫자 정리된 스냅샷을 보냄
+    const sentCfg = sanitizeCfg(cfgRef.current || cfg); // 숫자 정리된 최신 스냅샷을 보냄
     let r = null;
     // 네트워크 오류 시 1회 자동 재시도
     for (let attempt = 1; attempt <= 2; attempt++) {
@@ -248,6 +254,7 @@ export default function Admin() {
       setCfgMsg("✓ 저장 완료 — 저장 중에 수정한 내용이 더 있어요. 마저 고친 뒤 한 번 더 저장해주세요.");
       return;
     }
+    cfgRef.current = back;
     setCfg(back);
     setCfgDirty(false);
     if (!verified) {

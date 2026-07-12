@@ -1,5 +1,5 @@
 import { sb, supabaseHost } from "@/lib/supabase";
-import { BUILD } from "@/lib/config";
+import { BUILD, mergeConfig } from "@/lib/config";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -46,8 +46,26 @@ export async function GET() {
     };
 
     // 사이트 편집기 마지막 저장 시각
-    const { data: cfgRow } = await client.from("site_config").select("updated_at").eq("id", 1).maybeSingle();
+    const { data: cfgRow } = await client.from("site_config").select("data,updated_at").eq("id", 1).maybeSingle();
     report.설정_마지막저장 = cfgRow?.updated_at || "아직 저장된 적 없음 (기본값 사용중)";
+
+    // ★ 사이트가 지금 실제로 보여줄 값 — 여기 나오는 그대로 사이트에 표시됩니다
+    const merged = mergeConfig(cfgRow?.data);
+    report.사이트에_표시될_주요값 = {
+      이름: merged.texts.name,
+      칭호: merged.texts.titleChip,
+      사업설명: merged.texts.bizDesc,
+      인맥설명: merged.texts.netDesc,
+      개발_스텟: (merged.stats.find((s) => s.name === "개발") || {}).v ?? "(없음)",
+      HP: merged.hp.v,
+      MP: merged.mp.v,
+    };
+    const { data: pub } = await client
+      .from("subscribers")
+      .select("job,intro,chon")
+      .eq("approved", true)
+      .order("created_at", { ascending: true });
+    report.사이트_인맥에_표시될_승인구독자 = (pub || []).map((m) => (parseInt(m.chon, 10) || 4) + "촌 — " + m.job + (m.intro ? " (" + m.intro + ")" : ""));
   } catch (e) {
     report.오류 = String(e.message || e);
   }
