@@ -36,6 +36,10 @@ export default function Admin() {
   const frameRef = useRef(null);
   const genRef = useRef(0); // 편집 세대 카운터 — 저장 중 타이핑해도 안전하게
   const cfgRef = useRef(null); // 항상 최신 편집 상태를 담는 참조 (한글 입력 버그 방지용)
+  const baseAtRef = useRef(null); // 이 탭이 불러온 설정의 저장 시각 — 충돌 감지 기준
+  const dirtyRef = useRef(false); // cfgDirty의 실시간 참조
+  const [conflict, setConflict] = useState(false); // 다른 탭이 먼저 저장한 충돌 상태
+  const setDirty = (v) => { dirtyRef.current = v; setCfgDirty(v); };
 
   // 저장 안 된 수정사항이 있으면 창을 닫거나 새로고침할 때 경고
   useEffect(() => {
@@ -56,7 +60,20 @@ export default function Admin() {
     if (!authed) return;
     pollLive();
     const t = setInterval(pollLive, 10000);
-    return () => clearInterval(t);
+    // ★ 낡은 탭 방지: 탭으로 돌아왔을 때 수정 중이 아니면 자동으로 최신값을 다시 불러옴
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        pollLive();
+        if (!dirtyRef.current) load();
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", onVis);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", onVis);
+    };
   }, [authed]);
 
   async function load(k = key) {
@@ -67,7 +84,11 @@ export default function Admin() {
       if (d.error) return false;
       setData(d);
       setEdits({});
-      if (d.config && !cfgDirty) { cfgRef.current = mergeConfig(d.config); setCfg(cfgRef.current); }
+      if (d.config && !dirtyRef.current) {
+        cfgRef.current = mergeConfig(d.config);
+        setCfg(cfgRef.current);
+        baseAtRef.current = d.configUpdatedAt || null; // 이 시점 기준으로 편집 시작
+      }
       if (d.configUpdatedAt) setCfgSavedAt(d.configUpdatedAt);
       return true;
     } catch (e) { return false; }
@@ -140,7 +161,7 @@ export default function Admin() {
   }
 
   /* ── 사이트 편집기 헬퍼 ── */
-  const updateCfg = (next) => { genRef.current++; cfgRef.current = next; setCfg(next); setCfgDirty(true); };
+  const updateCfg = (next) => { genRef.current++; cfgRef.current = next; setCfg(next); setDirty(true); };
   const setText = (k, v) => updateCfg({ ...cfg, texts: { ...cfg.texts, [k]: v } });
   const setGauge = (g, field, v) => updateCfg({ ...cfg, [g]: { ...cfg[g], [field]: v } });
   const moveSection = (i, dir) => {
@@ -233,7 +254,9 @@ export default function Admin() {
     };
   }
 
-  async function saveConfig() {
+  async function saveConfig(forceArg) {
+    const force = forceArg === true; // 버튼 이벤트 객체가 들어와도 안전하게
+    setConflict(false);
     setCfgMsg("저장중...");
     // ★ 한글 입력 버그 수정: 입력창에서 글자를 조합하는 중에 저장을 누르면
     //    마지막 글자가 빠진 채 저장되는 문제 → 포커스를 해제해 글자를 강제 확정하고
@@ -246,7 +269,7 @@ export default function Admin() {
     // 네트워크 오류 시 1회 자동 재시도
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        r = await post({ action: "saveconfig", data: sentCfg });
+        r = await post({ action: "saveconfig", data: sentCfg, baseAt: baseAtRef.current, force });
         break;
       } catch (e) {
         if (attempt === 2) {
@@ -256,9 +279,16 @@ export default function Admin() {
         await new Promise((res) => setTimeout(res, 800));
       }
     }
+    // ★ 충돌: 다른 탭/기기에서 먼저 저장함 — 아래 버튼으로 선택
+    if (r?.error === "conflict") {
+      setConflict(true);
+      setCfgMsg("⚠️ 다른 탭(또는 다른 기기)에서 먼저 저장된 값이 있습니다. 아래에서 선택해주세요.");
+      return;
+    }
     if (r?.error === "db") { setCfgMsg("❌ 저장 실패 — " + (r.detail || "디비 오류") + " · 잠시 후 다시 저장을 눌러주세요."); return; }
     if (!r?.ok || !r?.saved) { setCfgMsg("❌ 저장 실패 — 잠시 후 다시 저장을 눌러주세요. 수정한 내용은 남아있습니다."); return; }
 
+    baseAtRef.current = r.at || null; // 이제 이 시각이 새 기준
     const back = mergeConfig(r.saved);
     const verified = JSON.stringify(canon(back)) === JSON.stringify(canon(mergeConfig(sentCfg)));
     setCfgSavedAt(r.at || null);
@@ -271,7 +301,7 @@ export default function Admin() {
     }
     cfgRef.current = back;
     setCfg(back);
-    setCfgDirty(false);
+    setDirty(false);
     pollLive(); // 저장 직후 사이트 실시간 값 즉시 재확인
     if (!verified) {
       setCfgMsg("⚠️ 저장은 됐지만 기록이 일부 달라 보여요 — 새로고침(F5) 후 값을 확인해주세요.");
@@ -447,8 +477,18 @@ export default function Admin() {
                 <br />{cfgMsg && (
                   <b style={{ color: cfgMsg.startsWith("✓") ? "var(--hp)" : "var(--red)" }}>
                     {cfgMsg}
-                    {(cfgMsg.startsWith("❌") || cfgMsg.startsWith("⚠️")) && <DiagLink />}
+                    {(cfgMsg.startsWith("❌") || cfgMsg.startsWith("⚠️")) && !conflict && <DiagLink />}
                   </b>
+                )}
+                {conflict && (
+                  <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                    <button className="sm" onClick={() => { setConflict(false); setDirty(false); setCfgMsg(""); load(); }}>
+                      🔄 최신값 불러오기 (이 화면의 수정 버림)
+                    </button>
+                    <button className="sm" onClick={() => saveConfig(true)}>
+                      💪 이 화면의 값으로 덮어쓰기
+                    </button>
+                  </div>
                 )}
               </div>
 

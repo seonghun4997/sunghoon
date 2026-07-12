@@ -58,6 +58,11 @@ export async function POST(req) {
 
     // 사이트 설정 저장
     if (b.action === "saveconfig") {
+      // ★ 충돌 방지 잠금: 다른 탭/기기에서 먼저 저장했다면(낡은 탭의 저장 시도) 덮어쓰기를 차단
+      const { data: cur } = await client.from("site_config").select("updated_at").eq("id", 1).maybeSingle();
+      if (!b.force && b.baseAt && cur?.updated_at && String(cur.updated_at) !== String(b.baseAt)) {
+        return NextResponse.json({ error: "conflict", at: cur.updated_at });
+      }
       // 저장 전에 형태를 정리(병합)해서 항상 완전한 설정만 디비에 기록 → 검증 오탐·깨진 데이터 방지
       const clean = mergeConfig(b.data || {});
       const { error } = await client
