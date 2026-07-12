@@ -1,4 +1,4 @@
-import { sb, supabaseHost } from "@/lib/supabase";
+import { sb, supabaseHost, isApproved } from "@/lib/supabase";
 import { BUILD, mergeConfig } from "@/lib/config";
 import { NextResponse } from "next/server";
 
@@ -34,7 +34,7 @@ export async function GET() {
     // 구독자 현황 — "승인했는데 4촌에 안 보여요" 진단용
     const { data: subs } = await client.from("subscribers").select("chon,approved");
     const list = subs || [];
-    const approvedList = list.filter((s) => s.approved);
+    const approvedList = list.filter((s) => isApproved(s.approved));
     const dist = { "1촌": 0, "2촌": 0, "3촌": 0, "4촌": 0 };
     approvedList.forEach((s) => { const c = parseInt(s.chon, 10) || 4; dist[c + "촌"]++; });
     report.구독자 = {
@@ -60,12 +60,17 @@ export async function GET() {
       HP: merged.hp.v,
       MP: merged.mp.v,
     };
-    const { data: pub } = await client
-      .from("subscribers")
-      .select("job,intro,chon")
-      .eq("approved", true)
-      .order("created_at", { ascending: true });
-    report.사이트_인맥에_표시될_승인구독자 = (pub || []).map((m) => (parseInt(m.chon, 10) || 4) + "촌 — " + m.job + (m.intro ? " (" + m.intro + ")" : ""));
+    // 사이트와 완전히 동일한 방식(전체 조회 후 코드 필터)으로 승인 구독자 확인
+    const { data: pubRows, error: pubErr } = await client.from("subscribers").select("*");
+    if (pubErr) {
+      report.사이트_인맥에_표시될_승인구독자 = "❌ 조회 오류: " + pubErr.message;
+    } else {
+      report.사이트_인맥에_표시될_승인구독자 = (pubRows || [])
+        .filter((m) => isApproved(m.approved))
+        .map((m) => (parseInt(m.chon, 10) || 4) + "촌 — " + (m.job || "") + (m.intro ? " (" + m.intro + ")" : ""));
+      // 승인값이 어떤 형태로 저장돼 있는지도 표시 (원인 추적용)
+      report.승인값_저장형태 = (pubRows || []).map((m) => (m.name || "?") + ": " + JSON.stringify(m.approved));
+    }
   } catch (e) {
     report.오류 = String(e.message || e);
   }

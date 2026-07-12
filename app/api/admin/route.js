@@ -1,4 +1,4 @@
-import { sb, kstDayStart } from "@/lib/supabase";
+import { sb, kstDayStart, isApproved } from "@/lib/supabase";
 import { mergeConfig } from "@/lib/config";
 import { sendSMS } from "@/lib/solapi";
 import { NextResponse } from "next/server";
@@ -26,7 +26,7 @@ export async function GET(req) {
       client.from("patchnotes").select("*").order("created_at", { ascending: false }),
       client.from("site_config").select("data,updated_at").eq("id", 1).maybeSingle(),
     ]);
-    const list = subs.data || [];
+    const list = (subs.data || []).map((s) => ({ ...s, approved: isApproved(s.approved) }));
     const total = vt.count || 0;
     const qr = vqr.count || 0;
     const share = vshare.count || 0;
@@ -115,7 +115,7 @@ export async function POST(req) {
 
     // 대기 → 승인으로 바뀐 순간, 환영 문자 자동 발송
     let sms = null;
-    if (before && !before.approved && patch.approved === true) {
+    if (before && !isApproved(before.approved) && patch.approved === true) {
       sms = await sendSMS(
         before.phone,
         `[전성훈 상태창] ${before.name}님, 4촌 등록이 승인됐습니다! 앞으로 사업·인맥 소식을 보내드릴게요. ${SITE}`
