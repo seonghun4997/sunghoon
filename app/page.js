@@ -307,7 +307,18 @@ export default function Home() {
         <div className="sechead"><h2>{T.bizTitle}</h2><span className="en">BUSINESS</span></div>
         {T.bizDesc?.trim() && <div className="desc">{T.bizDesc}</div>}
         {!viewer ? (
-          <Gate desc={T.bizGateDesc} />
+          <div className="tease">
+            <div className="tease-blur" aria-hidden="true">
+              {cfg.biz.slice(0, 4).map((b, i) => (
+                <div className="biz" key={i}>
+                  <span className="ic">{b.icon}</span>
+                  <div style={{ minWidth: 0, flex: 1 }}><div className="nm">{b.name}</div><div className="tg">{b.tag}</div></div>
+                  <span className={`stage ${STAGE_CLS[b.stage] || "early"}`}>{b.stage}</span>
+                </div>
+              ))}
+            </div>
+            <div className="tease-gate"><Gate desc={T.bizGateDesc} /></div>
+          </div>
         ) : cfg.biz.map((b, i) => (
           <div className="biz" key={i} style={viewer.chon <= 3 ? { flexWrap: "wrap" } : undefined}>
             <span className="ic">{b.icon}</span>
@@ -348,7 +359,22 @@ export default function Home() {
         <div className="sechead"><h2>인맥</h2><span className="en">NETWORK</span></div>
         {T.netDesc?.trim() && <div className="desc">{T.netDesc}</div>}
         {!viewer ? (
-          <Gate desc={T.netGateDesc} />
+          <div className="tease">
+            <div className="tease-blur" aria-hidden="true">
+              {cfg.network.filter((g) => (g.people || []).length > 0).slice(0, 2).map((g) => (
+                <div className="chon" key={g.chon}>
+                  <div className="chonhead"><span className={`n t${g.chon}`}>{g.chon}촌</span><span className="r">{g.rule}</span></div>
+                  {(g.people || []).slice(0, 3).map((pp, i) => (
+                    <div className="person" key={i}>
+                      <span className="ic">{pp.icon}</span>
+                      <div style={{ minWidth: 0 }}><div className="nm">{pp.job}</div><div className="ds">{pp.desc}</div></div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+            <div className="tease-gate"><Gate desc={T.netGateDesc} /></div>
+          </div>
         ) : cfg.network.map((g) => {
           const chon = g.chon;
           const rule = g.rule;
@@ -564,7 +590,7 @@ export default function Home() {
                   <h2 style={{ fontSize: 17 }}>구독 = 4촌 등록</h2>
                   <span className="en" style={{ color: "var(--mp)" }}>SUBSCRIBE</span>
                 </div>
-                <div className="desc">신청하면 <b style={{ color: "var(--mp)" }}>바로 4촌으로 등록</b>됩니다. 이름은 비공개 — 아이콘·직업·자랑 한 줄만 공개돼요.</div>
+                <div className="desc">신청하면 <b style={{ color: "var(--mp)" }}>바로 4촌으로 등록</b>됩니다. 이름·연락처는 비공개 — 아이콘·직업·자랑 한 줄만 공개돼요.</div>
                 <div className="fgroup">
                   <div className="flabel">프로필 아이콘 (공개)</div>
                   <div className="iconpick">
@@ -579,7 +605,7 @@ export default function Home() {
                     onChange={(e) => setForm({ ...form, name: e.target.value })} />
                 </div>
                 <div className="fgroup">
-                  <div className="flabel">연락처</div>
+                  <div className="flabel">연락처 (비공개 · 소식 문자 수신용)</div>
                   <input value={form.phone} inputMode="tel" placeholder="010-0000-0000"
                     onChange={(e) => setForm({ ...form, phone: e.target.value })} />
                 </div>

@@ -259,7 +259,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--gold)}
 .person .mini-act{margin-left:auto}
 
 /* v42 등급별 공개 */
-.gate{text-align:center;padding:26px 14px;border:1px dashed var(--line);border-radius:12px;margin-top:4px}
+.gate{text-align:center;padding:22px 16px;border:1px dashed var(--gold);border-radius:14px;margin-top:4px;background:rgba(13,15,34,.94);box-shadow:0 8px 32px rgba(0,0,0,.45)}
 .gate-ic{font-size:30px}
 .gate-tx{font-size:13.5px;color:var(--dim);margin:10px 0 14px;line-height:1.55}
 .gate button{display:block;width:100%;margin-top:8px}
@@ -285,3 +285,11 @@ button{min-height:42px}
   .sechead h2{font-size:17px}
   .big{font-size:16px}
 }
+
+/* v46 잠금 티저 — 흐릿하게 보여서 더 궁금하게 */
+.tease{position:relative;min-height:230px}
+.tease-blur{filter:blur(5px) saturate(.8);opacity:.55;pointer-events:none;user-select:none;-webkit-user-select:none}
+.tease-blur::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 20%,rgba(13,15,34,.55) 100%)}
+.tease-gate{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:8px}
+.tease-gate .gate{width:100%;max-width:300px;animation:gatein .5s ease}
+@keyframes gatein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
