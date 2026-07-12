@@ -126,7 +126,9 @@ body{
 .biz .nm{font-weight:700;font-size:15px}
 .biz .tg{font-size:12.5px;color:var(--dim);margin-top:1px}
 .biz .stage{margin-left:auto;flex-shrink:0;font-size:12px;font-weight:800;border-radius:7px;padding:3px 9px;white-space:nowrap}
+.biz .stage.expand{color:#17182E;background:var(--gold)}
 .biz .stage.adv{color:#17182E;background:var(--hp)}
+.biz .stage.grow{color:#17182E;background:var(--mp)}
 .biz .stage.early{color:var(--dim);background:var(--card);border:1px solid var(--line)}
 .biz .lock{font-size:15px;opacity:.7}
 .note{font-size:13px;color:var(--dim);margin-top:12px;text-align:center}
@@ -247,3 +249,9 @@ input:focus,textarea:focus,select:focus{border-color:var(--gold)}
 .ed-row button.sm{padding:8px 10px;font-size:12px;flex-shrink:0}
 .ed-biz{border:1px dashed var(--line);border-radius:10px;padding:10px 10px 2px;margin-bottom:10px}
 .ed-group .fgroup input,.ed-group .fgroup textarea{font-size:13.5px;padding:10px 12px}
+
+/* 카드 내 소형 액션 버튼 (자세히/소개받기) */
+.mini-act{flex-shrink:0;background:var(--card);color:var(--gold);border:1px solid var(--gold);border-radius:8px;padding:8px 10px;font-size:12px;font-weight:800;box-shadow:none;white-space:nowrap}
+.mini-act:active{transform:translateY(2px)}
+.biz .stage{margin-left:auto}
+.person .mini-act{margin-left:auto}

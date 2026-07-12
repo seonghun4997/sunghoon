@@ -90,6 +90,7 @@ export default function Admin() {
   /* ── 사이트 편집기 헬퍼 ── */
   const updateCfg = (next) => { setCfg(next); setCfgDirty(true); };
   const setText = (k, v) => updateCfg({ ...cfg, texts: { ...cfg.texts, [k]: v } });
+  const setGauge = (g, field, v) => updateCfg({ ...cfg, [g]: { ...cfg[g], [field]: v } });
   const moveSection = (i, dir) => {
     const o = [...cfg.order];
     const j = i + dir;
@@ -121,9 +122,20 @@ export default function Admin() {
   const statOps = cfg ? listOps("stats") : null;
   const bizOps = cfg ? listOps("biz") : null;
 
+  // 키 순서 무시하고 내용만 비교 (디비는 JSON 키 순서를 재정렬해서 저장함)
+  function canon(v) {
+    if (Array.isArray(v)) return v.map(canon);
+    if (v && typeof v === "object") {
+      const r = {};
+      Object.keys(v).sort().forEach((k) => { r[k] = canon(v[k]); });
+      return r;
+    }
+    return v;
+  }
+
   async function saveConfig() {
     setCfgMsg("저장중...");
-    const sent = JSON.stringify(cfg);
+    const sentCfg = cfg;
     const r = await post({ action: "saveconfig", data: cfg });
     if (r.error === "db") { setCfgMsg("❌ 저장 실패 — " + (r.detail || "디비 오류")); return; }
     if (!r.ok || !r.saved) { setCfgMsg("❌ 저장 실패 (" + JSON.stringify(r).slice(0, 120) + ")"); return; }
@@ -131,12 +143,12 @@ export default function Admin() {
     setCfg(back);
     setCfgDirty(false);
     setCfgSavedAt(r.at || null);
-    if (JSON.stringify(back) !== sent) {
-      setCfgMsg("⚠️ 저장은 됐지만 보낸 값과 디비 값이 달라요 — 이 화면을 캡처해주세요");
+    if (frameRef.current) frameRef.current.src = "/?preview=" + Date.now();
+    if (JSON.stringify(canon(back)) !== JSON.stringify(canon(sentCfg))) {
+      setCfgMsg("⚠️ 저장은 됐지만 일부 값이 다르게 기록됐어요 — 이 화면을 캡처해주세요");
       return;
     }
     setCfgMsg("✓ 디비 저장·검증 완료 — 사이트를 새로고침하면 반영됩니다");
-    if (frameRef.current) frameRef.current.src = "/?preview=" + Date.now();
     setTimeout(() => setCfgMsg(""), 6000);
   }
 
@@ -335,6 +347,25 @@ export default function Admin() {
                 ))}
               </details>
 
+              {/* HP / MP */}
+              <details className="ed-group">
+                <summary>HP / MP 게이지</summary>
+                {["hp", "mp"].map((g) => (
+                  <div key={g}>
+                    <div className="ed-row">
+                      <span style={{ width: 40, fontWeight: 800, fontFamily: "var(--pixel)", fontSize: 11, color: g === "hp" ? "#FF5B5B" : "var(--mp)" }}>{g.toUpperCase()}</span>
+                      <input type="number" min={0} max={100} style={{ width: 90, flexShrink: 0 }}
+                        value={cfg[g].v}
+                        onChange={(e) => setGauge(g, "v", Math.max(0, Math.min(100, parseInt(e.target.value || 0, 10))))} />
+                      <input style={{ flex: 1, minWidth: 0 }} placeholder="설명 문구"
+                        value={cfg[g].cap}
+                        onChange={(e) => setGauge(g, "cap", e.target.value)} />
+                    </div>
+                  </div>
+                ))}
+                <div className="adm-msg" style={{ padding: 0, textAlign: "left", fontSize: 12 }}>HP 30 이하면 빨간색으로 깜빡입니다.</div>
+              </details>
+
               {/* 기본 정보 */}
               <details className="ed-group">
                 <summary>기본 정보</summary>
@@ -384,7 +415,7 @@ export default function Admin() {
                       <input style={{ width: 52, flexShrink: 0, textAlign: "center" }} value={b.icon} onChange={(e) => bizOps.set(i, "icon", e.target.value)} />
                       <input style={{ flex: 1, minWidth: 0 }} value={b.name} onChange={(e) => bizOps.set(i, "name", e.target.value)} />
                       <select style={{ width: 92, flexShrink: 0 }} value={b.stage} onChange={(e) => bizOps.set(i, "stage", e.target.value)}>
-                        <option>고도화</option><option>초기</option>
+                        <option>확장</option><option>고도화</option><option>성장</option><option>초기</option>
                       </select>
                     </div>
                     <div className="ed-row">
@@ -411,6 +442,11 @@ export default function Admin() {
                   ["ctaWelcome", "환영 문구"],
                   ["ctaLocation", "위치 문구"],
                   ["caughtLine", "포획 성공 대사"],
+                  ["lockBizTitle", "사업 잠금 팝업 제목"],
+                  ["lockBizDesc", "사업 잠금 팝업 내용"],
+                  ["lockNetTitle", "소개받기 팝업 제목"],
+                  ["lockNetDesc", "소개받기 팝업 내용"],
+                  ["lockBtn", "팝업 구독 버튼 문구"],
                 ].map(([k, label]) => (
                   <div className="fgroup" key={k}>
                     <div className="flabel">{label}</div>

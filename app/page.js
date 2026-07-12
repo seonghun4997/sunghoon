@@ -4,6 +4,9 @@ import { DEFAULT_CONFIG, mergeConfig, lines } from "@/lib/config";
 
 const RANK = (v) => (v >= 9 ? "S" : v >= 7 ? "A" : v >= 5 ? "B" : v >= 3 ? "C" : "D");
 
+// 사업 단계 → 칩 색상 클래스 (확장=금색, 고도화=초록, 성장=파랑, 초기=회색)
+const STAGE_CLS = { 확장: "expand", 고도화: "adv", 성장: "grow", 초기: "early" };
+
 const NET = [
   [1, "사적으로 9회 이상 만난 사람", [
     ["🛒", "커머스 마케터", "연매출 1,200억 커머스"],
@@ -38,6 +41,7 @@ export default function Home() {
   const [sending, setSending] = useState(false);
   const [form, setForm] = useState({ name: "", phone: "", job: "", intro: "" });
   const [toastMsg, setToastMsg] = useState("");
+  const [lock, setLock] = useState(null); // {title, desc} — 구독 유도 모달
 
   const T = cfg.texts;
 
@@ -177,6 +181,26 @@ export default function Home() {
             {T.tagline?.trim() && <div className="tagline">{T.tagline}</div>}
           </div>
         </div>
+        <div className="barwrap">
+          <div className="barhead">
+            <span className="lb" style={{ color: cfg.hp.v <= 30 ? "#FF5B5B" : "var(--hp)" }}>HP</span>
+            <span className="val">{cfg.hp.v} / 100</span>
+          </div>
+          <div className="bar">
+            <div className={cfg.hp.v <= 30 ? "hp-crit" : ""} style={{ width: Math.max(2, cfg.hp.v) + "%", background: cfg.hp.v <= 30 ? "#FF5B5B" : "var(--hp)" }} />
+          </div>
+          {cfg.hp.cap?.trim() && <div className="cap">{cfg.hp.cap}</div>}
+        </div>
+        <div className="barwrap">
+          <div className="barhead">
+            <span className="lb" style={{ color: "var(--mp)" }}>MP</span>
+            <span className="val">{cfg.mp.v} / 100</span>
+          </div>
+          <div className="bar">
+            <div style={{ width: Math.max(2, cfg.mp.v) + "%", background: "var(--mp)" }} />
+          </div>
+          {cfg.mp.cap?.trim() && <div className="cap">{cfg.mp.cap}</div>}
+        </div>
       </section>
     ),
 
@@ -215,9 +239,9 @@ export default function Home() {
         {cfg.biz.map((b, i) => (
           <div className="biz" key={i}>
             <span className="ic">{b.icon}</span>
-            <div><div className="nm">{b.name}</div><div className="tg">{b.tag}</div></div>
-            <span className={`stage ${b.stage === "고도화" ? "adv" : "early"}`}>{b.stage}</span>
-            <span className="lock">🔒</span>
+            <div style={{ minWidth: 0 }}><div className="nm">{b.name}</div><div className="tg">{b.tag}</div></div>
+            <span className={`stage ${STAGE_CLS[b.stage] || "early"}`}>{b.stage}</span>
+            <button className="mini-act" onClick={() => setLock({ title: T.lockBizTitle, desc: T.lockBizDesc })}>자세히 🔒</button>
           </div>
         ))}
         {T.bizNote?.trim() && <div className="note">{T.bizNote}</div>}
@@ -262,7 +286,8 @@ export default function Home() {
                       {all.map(([ic, nm, ds], i) => (
                         <div className="person" key={"4-" + i}>
                           <span className="ic">{ic}</span>
-                          <div><div className="nm">{nm}</div><div className="ds">{ds}</div></div>
+                          <div style={{ minWidth: 0 }}><div className="nm">{nm}</div><div className="ds">{ds}</div></div>
+                          <button className="mini-act" onClick={() => setLock({ title: T.lockNetTitle, desc: T.lockNetDesc })}>소개받기</button>
                         </div>
                       ))}
                     </div>
@@ -280,7 +305,8 @@ export default function Home() {
                 all.map(([ic, nm, ds], i) => (
                   <div className="person" key={chon + "-" + i}>
                     <span className="ic">{ic}</span>
-                    <div><div className="nm">{nm}</div><div className="ds">{ds}</div></div>
+                    <div style={{ minWidth: 0 }}><div className="nm">{nm}</div><div className="ds">{ds}</div></div>
+                    <button className="mini-act" onClick={() => setLock({ title: T.lockNetTitle, desc: T.lockNetDesc })}>소개받기</button>
                   </div>
                 ))
               )}
@@ -437,6 +463,21 @@ export default function Home() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 구독 유도 모달 */}
+      {lock && (
+        <div className="modal-bg" onClick={(e) => e.target === e.currentTarget && setLock(null)}>
+          <div className="modal" style={{ textAlign: "center", padding: "26px 22px" }}>
+            <div style={{ fontSize: 32 }}>🔒</div>
+            <div style={{ fontWeight: 800, fontSize: 18, marginTop: 10 }}>{lock.title}</div>
+            <div style={{ fontSize: 14, color: "var(--dim)", marginTop: 8, lineHeight: 1.8 }}>{lock.desc}</div>
+            <div style={{ marginTop: 18, display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+              <button className="mp" onClick={() => { setLock(null); openSub(); }}>{T.lockBtn}</button>
+              <button className="ghost" onClick={() => setLock(null)}>닫기</button>
+            </div>
           </div>
         </div>
       )}
