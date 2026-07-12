@@ -103,14 +103,14 @@ export default function Admin() {
     };
   }, [authed]);
 
-  async function load(k = key) {
+  async function load(k = key, clearEdits = false) {
     try {
       const r = await fetch("/api/admin?key=" + encodeURIComponent(k));
       if (!r.ok) return false;
       const d = await r.json();
       if (d.error) return false;
       setData(d);
-      setEdits({});
+      if (clearEdits) setEdits({}); // ★ v39: 자동 폴링은 편집 중인 선택(촌수/승인)을 절대 지우지 않음
       if (d.config && !dirtyRef.current) {
         cfgRef.current = mergeConfig(d.config);
         setCfg(cfgRef.current);
@@ -152,9 +152,17 @@ export default function Admin() {
         intro: e.intro ?? s.intro ?? "",
       });
       if (!res?.ok) { setSubMsg("err:저장 실패 — 서버가 저장을 거부했습니다."); return; }
+      // ★ v39: 디비에 실제로 기록된 값을 돌려받아 대조 — 화면과 디비가 다르면 즉시 들통
+      const sentChon = parseInt(chon, 10) || 4;
+      const sentApproved = approved === "Y" || approved === true;
+      if (res.row && (res.row.chon !== sentChon || res.row.approved !== sentApproved)) {
+        setSubMsg("err:⚠️ 디비에 다른 값이 저장됨 (" + res.row.chon + "촌/" + (res.row.approved ? "승인" : "대기") + ") — 다시 저장해주세요.");
+        return;
+      }
       setSavedId(s.id);
       setTimeout(() => setSavedId(null), 1500);
-      setSubMsg("ok:" + s.name + "님 저장 완료" + (res.smsSent ? " · 환영 문자 발송됨" : ""));
+      setSubMsg("ok:" + s.name + "님 저장·검증 완료 — 디비 기록: " + (res.row ? res.row.chon + "촌 · " + (res.row.approved ? "승인" : "대기") : "확인됨") + (res.smsSent ? " · 환영 문자 발송됨" : "") + " · 사이트에 10초 내 반영");
+      setEdits((p) => { const n = { ...p }; delete n[s.id]; return n; });
       load();
     } catch (e) {
       setSubMsg("err:네트워크 오류 — 인터넷 연결을 확인하고 다시 시도해주세요.");
@@ -458,7 +466,7 @@ export default function Admin() {
               <div className="sechead" style={{ border: "none", padding: 0, margin: 0 }}>
                 <h2>구독자 관리</h2><span className="en">SUBSCRIBERS</span>
               </div>
-              <button className="sm" onClick={() => load()}>새로고침</button>
+              <button className="sm" onClick={() => load(key, true)}>새로고침</button>
             </div>
             <div className="adm-msg" style={{ padding: "0 0 12px", textAlign: "left" }}>
               대기 → 승인으로 바꾸고 저장하면 환영 문자가 자동 발송됩니다{data.smsReady ? "" : " (Solapi 설정 후 활성화)"}.

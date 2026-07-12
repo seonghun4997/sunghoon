@@ -20,16 +20,10 @@ export async function GET() {
   };
   try {
     const client = sb();
-    for (const t of ["subscribers", "visits", "patchnotes", "site_config"]) {
+    for (const t of ["subscribers", "visits", "patchnotes", "config_journal"]) {
       const { error } = await client.from(t).select("*", { count: "exact", head: true });
       report.읽기[t] = error ? "❌ " + error.message : "✅";
     }
-    // 쓰기 테스트: 실데이터는 건드리지 않고 별도 검사행(id 999)으로 확인 후 삭제
-    const { error: werr } = await client
-      .from("site_config")
-      .upsert({ id: 999, data: { probe: true }, updated_at: new Date().toISOString() });
-    report.쓰기테스트 = werr ? "❌ " + werr.message : "✅ 저장 가능";
-    if (!werr) await client.from("site_config").delete().eq("id", 999);
 
     // ★★ v38: 새 저장소(config_journal) 자가테스트 — 이게 ✅면 설정 저장은 무조건 정상
     try {
@@ -45,34 +39,13 @@ export async function GET() {
       }
     } catch (e) { report.새저장소_테스트 = "❌ " + String(e.message || e); }
 
-    // (참고) 옛 저장소(patchnotes) 실전 크기 자가테스트 — 실제 설정과 비슷한 6000자를 넣었다 지워본다
-    try {
-      const big = "x".repeat(6000);
-      const { data: t, error: e1 } = await client
-        .from("patchnotes").insert({ version: "__selftest__", content: big }).select("id,content").single();
-      if (e1) {
-        report.설정저널_쓰기테스트 = "❌ 쓰기 실패: " + e1.message;
-      } else {
-        const savedLen = (t.content || "").length;
-        const { data: back, error: e2 } = await client
-          .from("patchnotes").select("id,content").eq("id", t.id).maybeSingle();
-        await client.from("patchnotes").delete().eq("id", t.id);
-        if (e2 || !back) report.설정저널_쓰기테스트 = "⚠️ 썼는데 다시 읽기 실패: " + (e2 ? e2.message : "행이 사라짐");
-        else if (savedLen !== 6000 || (back.content || "").length !== 6000) report.설정저널_쓰기테스트 = "⚠️ 잘림 발생: 저장 " + savedLen + "자 / 재조회 " + (back.content || "").length + "자";
-        else report.설정저널_쓰기테스트 = "✅ 정상 (6000자 쓰기·재조회·삭제 성공)";
-      }
-    } catch (e) { report.설정저널_쓰기테스트 = "❌ " + String(e.message || e); }
-    // 설정 저널에 실제로 쌓인 행 현황
+    // 설정 저장 이력 (최근 3개)
     try {
       const { data: js, error: je } = await client
-        .from("patchnotes").select("id,created_at,content").eq("version", "__config__")
-        .order("created_at", { ascending: false }).limit(3);
-      if (je) report.설정저널_현황 = "❌ 조회 오류: " + je.message;
-      else report.설정저널_현황 = (js || []).length === 0 ? "저장된 행 없음" : (js || []).map((r) => {
-        let v = "파싱실패"; try { v = "#" + (JSON.parse(r.content).__v ?? "?"); } catch (e) {}
-        return v + " · " + String(r.created_at).slice(0, 19).replace("T", " ") + " · " + (r.content || "").length + "자";
-      });
-    } catch (e) { report.설정저널_현황 = "❌ " + String(e.message || e); }
+        .from("config_journal").select("id,created_at,v").order("v", { ascending: false }).limit(3);
+      if (je) report.설정저장_이력 = "❌ " + je.message;
+      else report.설정저장_이력 = (js || []).length === 0 ? "저장된 적 없음 (기본값 사용중 — 정상)" : (js || []).map((r) => "#" + r.v + " · " + String(r.created_at).slice(0, 19).replace("T", " "));
+    } catch (e) { report.설정저장_이력 = "❌ " + String(e.message || e); }
 
     // 구독자 현황 — "승인했는데 4촌에 안 보여요" 진단용
     const { data: subs } = await client.from("subscribers").select("chon,approved");

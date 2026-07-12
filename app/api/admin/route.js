@@ -119,6 +119,8 @@ export async function POST(req) {
     if (typeof b.intro === "string") patch.intro = b.intro.trim().slice(0, 20);
     const { error } = await client.from("subscribers").update(patch).eq("id", b.id);
     if (error) return NextResponse.json({ error: "db" }, { status: 500 });
+    // ★ v39: 방금 기록된 행을 다시 읽어 그대로 반환 (프론트가 대조 검증)
+    const { data: after } = await client.from("subscribers").select("*").eq("id", b.id).single();
 
     // 대기 → 승인으로 바뀐 순간, 환영 문자 자동 발송
     let sms = null;
@@ -128,7 +130,7 @@ export async function POST(req) {
         `[전성훈 상태창] ${before.name}님, 4촌 등록이 승인됐습니다! 앞으로 사업·인맥 소식을 보내드릴게요. ${SITE}`
       );
     }
-    return NextResponse.json({ ok: true, smsSent: sms ? !sms.skipped : false });
+    return NextResponse.json({ ok: true, smsSent: sms ? !sms.skipped : false, row: after ? { id: after.id, chon: parseInt(after.chon, 10) || 4, approved: isApproved(after.approved), name: after.name || "", job: after.job || "", intro: after.intro || "" } : null });
   } catch (e) {
     return NextResponse.json({ error: "server" }, { status: 500 });
   }
