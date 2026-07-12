@@ -16,10 +16,10 @@ const NO_CACHE = {
 export async function GET() {
   try {
     const client = sb();
-    const [{ data: cfgRow }, { data: rows }, { data: notes }] = await Promise.all([
+    const [cfgRow, { data: rows }, { data: notes }] = await Promise.all([
       readLatestConfig(client),
       client.from("subscribers").select("*"),
-      client.from("patchnotes").select("id,created_at,version,content").order("created_at", { ascending: false }).limit(10),
+      client.from("patchnotes").select("id,created_at,version,content").neq("version", "__config__").order("created_at", { ascending: false }).limit(10),
     ]);
     const all = rows || [];
     all.sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")));

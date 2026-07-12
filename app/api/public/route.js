@@ -13,6 +13,7 @@ export async function GET() {
       client
         .from("patchnotes")
         .select("id,created_at,version,content")
+        .neq("version", "__config__")
         .order("created_at", { ascending: false })
         .limit(10),
     ]);

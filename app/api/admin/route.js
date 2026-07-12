@@ -23,7 +23,7 @@ export async function GET(req) {
       client.from("visits").select("*", { count: "exact", head: true }).eq("src", "qr"),
       client.from("visits").select("*", { count: "exact", head: true }).eq("src", "share"),
       client.from("subscribers").select("*").order("created_at", { ascending: false }),
-      client.from("patchnotes").select("*").order("created_at", { ascending: false }),
+      client.from("patchnotes").select("*").neq("version", "__config__").order("created_at", { ascending: false }),
       readLatestConfig(client),
     ]);
     const list = (subs.data || []).map((s) => ({ ...s, approved: isApproved(s.approved) }));
@@ -62,7 +62,7 @@ export async function POST(req) {
       // ★ v33 저널 저장: 덮어쓰기 대신 새 버전 행 추가 — 과거 데이터가 최신 저장을 이길 수 없음
       // 충돌 방지: 이 탭이 본 버전 번호(baseId)와 현재 최신 번호가 다르면 차단
       const latest = await readLatestConfig(client);
-      if (!b.force && b.baseId && latest?.id && Number(latest.id) !== Number(b.baseId)) {
+      if (!b.force && b.baseId && latest?.id && String(latest.id) !== String(b.baseId)) {
         return NextResponse.json({ error: "conflict", at: latest.updated_at, id: latest.id });
       }
       const clean = mergeConfig(b.data || {});
@@ -75,6 +75,7 @@ export async function POST(req) {
     // 패치노트 등록
     if (b.action === "addnote") {
       const version = String(b.version || "").trim().slice(0, 20);
+      if (version === "__config__") return NextResponse.json({ error: "invalid" }, { status: 400 });
       const content = String(b.content || "").trim().slice(0, 200);
       if (!version || !content) return NextResponse.json({ error: "invalid" }, { status: 400 });
       const { error } = await client.from("patchnotes").insert({ version, content });
