@@ -96,7 +96,7 @@ export default function Home() {
     };
     loadData();
     const onVisible = () => { if (document.visibilityState === "visible") loadData(); };
-    const timer = setInterval(loadData, 30000);
+    const timer = setInterval(loadData, 10000); // 10초마다 자동 갱신 (실시간 연동)
     window.addEventListener("focus", onVisible);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
@@ -188,7 +188,6 @@ export default function Home() {
             <div className="lv">{T.level}</div>
           </div>
           <div style={{ minWidth: 0, paddingTop: 4 }}>
-            {T.titleChip?.trim() && <div className="title-chip">{T.titleChip}</div>}
             <div className="name">{T.name}</div>
             {T.subtitle?.trim() && <div className="sub">{T.subtitle}</div>}
             {T.tagline?.trim() && <div className="tagline">{T.tagline}</div>}

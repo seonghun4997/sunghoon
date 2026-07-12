@@ -53,7 +53,6 @@ export async function GET() {
     const merged = mergeConfig(cfgRow?.data);
     report.사이트에_표시될_주요값 = {
       이름: merged.texts.name,
-      칭호: merged.texts.titleChip,
       사업설명: merged.texts.bizDesc,
       인맥설명: merged.texts.netDesc,
       개발_스텟: (merged.stats.find((s) => s.name === "개발") || {}).v ?? "(없음)",

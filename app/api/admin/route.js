@@ -115,6 +115,10 @@ export async function POST(req) {
     const patch = {};
     if (b.chon) patch.chon = parseInt(b.chon, 10);
     if (typeof b.approved === "boolean") patch.approved = b.approved;
+    // ★ 구독자 표시 정보 수정 (이름·직업·한줄소개) — 사이트 인맥 칸에 그대로 노출되는 값
+    if (typeof b.name === "string") patch.name = b.name.trim().slice(0, 20);
+    if (typeof b.job === "string") patch.job = b.job.trim().slice(0, 10);
+    if (typeof b.intro === "string") patch.intro = b.intro.trim().slice(0, 20);
     const { error } = await client.from("subscribers").update(patch).eq("id", b.id);
     if (error) return NextResponse.json({ error: "db" }, { status: 500 });
 

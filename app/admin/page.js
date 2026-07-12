@@ -38,7 +38,9 @@ export default function Admin() {
   const cfgRef = useRef(null); // 항상 최신 편집 상태를 담는 참조 (한글 입력 버그 방지용)
   const baseAtRef = useRef(null); // 이 탭이 불러온 설정의 저장 시각 — 충돌 감지 기준
   const dirtyRef = useRef(false); // cfgDirty의 실시간 참조
-  const [conflict, setConflict] = useState(false); // 다른 탭이 먼저 저장한 충돌 상태
+  const [conflict, _setConflict] = useState(false); // 다른 탭이 먼저 저장한 충돌 상태
+  const conflictRef = useRef(false);
+  const setConflict = (v) => { conflictRef.current = v; _setConflict(v); };
   const setDirty = (v) => { dirtyRef.current = v; setCfgDirty(v); };
 
   // ★ 킬스위치: 과거 사이트가 브라우저에 남긴 서비스워커·캐시를 전부 제거
@@ -134,7 +136,14 @@ export default function Admin() {
       const e = edits[s.id] || {};
       const chon = e.chon ?? s.chon;
       const approved = e.approved ?? (s.approved ? "Y" : "N");
-      const res = await post({ id: s.id, chon: parseInt(chon, 10), approved: approved === "Y" || approved === true });
+      const res = await post({
+        id: s.id,
+        chon: parseInt(chon, 10),
+        approved: approved === "Y" || approved === true,
+        name: e.name ?? s.name ?? "",
+        job: e.job ?? s.job ?? "",
+        intro: e.intro ?? s.intro ?? "",
+      });
       if (!res?.ok) { setSubMsg("err:저장 실패 — 서버가 저장을 거부했습니다."); return; }
       setSavedId(s.id);
       setTimeout(() => setSavedId(null), 1500);
@@ -179,7 +188,25 @@ export default function Admin() {
   }
 
   /* ── 사이트 편집기 헬퍼 ── */
-  const updateCfg = (next) => { genRef.current++; cfgRef.current = next; setCfg(next); setDirty(true); };
+  const updateCfg = (next) => {
+    genRef.current++;
+    cfgRef.current = next;
+    setCfg(next);
+    setDirty(true);
+    scheduleAutoSave(); // ★ 실시간 연동: 수정하면 1.5초 뒤 자동 저장
+  };
+
+  // ★ 자동 저장 (실시간 연동) — 타이핑을 멈추고 1.5초가 지나면 저장 버튼 없이 자동 저장
+  const autoTimerRef = useRef(null);
+  const savingRef = useRef(false);
+  const scheduleAutoSave = () => {
+    if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
+    autoTimerRef.current = setTimeout(async () => {
+      if (savingRef.current || conflictRef.current) { scheduleAutoSave(); return; } // 저장 중/충돌 중이면 잠시 후 재시도
+      savingRef.current = true;
+      try { await saveConfig(undefined, true); } finally { savingRef.current = false; }
+    }, 1500);
+  };
   const setText = (k, v) => updateCfg({ ...cfg, texts: { ...cfg.texts, [k]: v } });
   const setGauge = (g, field, v) => updateCfg({ ...cfg, [g]: { ...cfg[g], [field]: v } });
   const moveSection = (i, dir) => {
@@ -272,14 +299,14 @@ export default function Admin() {
     };
   }
 
-  async function saveConfig(forceArg) {
+  async function saveConfig(forceArg, auto) {
     const force = forceArg === true; // 버튼 이벤트 객체가 들어와도 안전하게
     setConflict(false);
-    setCfgMsg("저장중...");
-    // ★ 한글 입력 버그 수정: 입력창에서 글자를 조합하는 중에 저장을 누르면
-    //    마지막 글자가 빠진 채 저장되는 문제 → 포커스를 해제해 글자를 강제 확정하고
-    //    잠깐 기다린 뒤, 가장 최신 편집 상태(cfgRef)를 저장한다
-    if (typeof document !== "undefined" && document.activeElement?.blur) document.activeElement.blur();
+    setCfgMsg(auto ? "자동 저장중..." : "저장중...");
+    // ★ 한글 입력 버그 수정: 조합 중 저장 시 마지막 글자가 빠지는 문제
+    //   수동 저장: 포커스를 해제해 글자를 강제 확정
+    //   자동 저장: 타이핑을 방해하지 않도록 포커스는 유지 (어차피 다음 자동 저장이 따라잡음)
+    if (!auto && typeof document !== "undefined" && document.activeElement?.blur) document.activeElement.blur();
     await new Promise((r) => setTimeout(r, 120));
     const gen = genRef.current;             // 저장 시작 시점의 편집 세대
     const sentCfg = sanitizeCfg(cfgRef.current || cfg); // 숫자 정리된 최신 스냅샷을 보냄
@@ -310,11 +337,12 @@ export default function Admin() {
     const back = mergeConfig(r.saved);
     const verified = JSON.stringify(canon(back)) === JSON.stringify(canon(mergeConfig(sentCfg)));
     setCfgSavedAt(r.at || null);
-    if (frameRef.current) frameRef.current.src = "/?preview=" + Date.now();
+    if (!auto && frameRef.current) frameRef.current.src = "/?preview=" + Date.now();
 
-    // 저장하는 동안 추가로 수정한 게 있으면 화면의 수정본을 보호 (덮어쓰지 않음)
+    // 저장하는 동안 추가로 수정한 게 있으면 화면의 수정본을 보호 (덮어쓰지 않음) — 자동 저장이 곧 이어받음
     if (genRef.current !== gen) {
-      setCfgMsg("✓ 저장 완료 — 저장 중에 수정한 내용이 더 있어요. 마저 고친 뒤 한 번 더 저장해주세요.");
+      setCfgMsg("✓ 저장됨 — 이어서 수정한 내용은 잠시 후 자동 저장됩니다.");
+      scheduleAutoSave();
       return;
     }
     cfgRef.current = back;
@@ -325,7 +353,7 @@ export default function Admin() {
       setCfgMsg("⚠️ 저장은 됐지만 기록이 일부 달라 보여요 — 새로고침(F5) 후 값을 확인해주세요.");
       return;
     }
-    setCfgMsg("✓ 디비 저장·검증 완료 — 사이트를 새로고침하면 반영됩니다");
+    setCfgMsg("✓ 저장·검증 완료 — 사이트에 10초 안에 자동 반영됩니다");
     setTimeout(() => setCfgMsg(""), 6000);
   }
 
@@ -435,8 +463,16 @@ export default function Admin() {
                       </span>
                       <span className="time">{String(s.created_at).slice(0, 16).replace("T", " ")}</span>
                     </div>
-                    <div className="meta">{s.phone} · {s.job}</div>
-                    {s.intro && <div className="intro">{s.intro}</div>}
+                    <div className="meta">{s.phone}</div>
+                    {/* ★ 표시 정보 직접 수정 — 사이트 인맥 칸에 노출되는 값 */}
+                    <div className="ctrl" style={{ marginTop: 6, flexWrap: "wrap" }}>
+                      <input style={{ width: 100 }} value={e.name ?? s.name ?? ""} placeholder="이름(비공개)"
+                        onChange={(ev) => setEdit(s.id, { name: ev.target.value })} />
+                      <input style={{ width: 110 }} value={e.job ?? s.job ?? ""} placeholder="직업(공개)"
+                        onChange={(ev) => setEdit(s.id, { job: ev.target.value })} />
+                      <input style={{ flex: 1, minWidth: 120 }} value={e.intro ?? s.intro ?? ""} placeholder="한줄소개(공개)"
+                        onChange={(ev) => setEdit(s.id, { intro: ev.target.value })} />
+                    </div>
                     <div className="ctrl">
                       <select value={chonVal} onChange={(ev) => setEdit(s.id, { chon: ev.target.value })}>
                         {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}촌</option>)}
@@ -520,7 +556,7 @@ export default function Admin() {
                   <div style={{ borderTop: "1px dashed var(--line)", margin: "8px 0" }} />
                   <b style={{ color: "var(--gold)" }}>📡 사이트 실시간 값</b>
                   {liveAt && <span style={{ opacity: 0.6 }}> · {liveAt.toLocaleTimeString()} 확인 (10초마다 자동)</span>}
-                  <br />이름 <b>{live.cfg.texts.name}</b> · 칭호 <b>{live.cfg.texts.titleChip || "(비어있음)"}</b> · HP <b>{live.cfg.hp.v}</b> · 개발스텟 <b>{(live.cfg.stats.find((s) => s.name === "개발") || {}).v ?? "-"}</b>
+                  <br />이름 <b>{live.cfg.texts.name}</b> · HP <b>{live.cfg.hp.v}</b> · 개발스텟 <b>{(live.cfg.stats.find((s) => s.name === "개발") || {}).v ?? "-"}</b>
                   <br /><span style={{ opacity: 0.7 }}>저장 &amp; 반영 후 이 줄이 바뀌면 = 반영 성공. "디비 마지막 저장" 시각도 방금 시각으로 바뀌어야 정상입니다.</span>
                 </div>
               )}
@@ -552,7 +588,6 @@ export default function Admin() {
                 <summary>핵심 문구</summary>
                 {[
                   ["dialog", "인카운터 대사"],
-                  ["titleChip", "칭호"],
                   ["name", "이름"],
                   ["subtitle", "직함"],
                   ["tagline", "태그라인"],
