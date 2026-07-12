@@ -120,8 +120,8 @@ export default function Admin() {
   async function saveConfig() {
     setCfgMsg("저장중...");
     const r = await post({ action: "saveconfig", data: cfg });
-    if (r.error === "db") { setCfgMsg("❌ 저장 실패 — site_config 테이블이 없을 수 있습니다. SQL을 실행해주세요."); return; }
-    if (!r.ok) { setCfgMsg("❌ 저장 실패"); return; }
+    if (r.error === "db") { setCfgMsg("❌ 저장 실패 — " + (r.detail || "디비 오류")); return; }
+    if (!r.ok) { setCfgMsg("❌ 저장 실패 (" + JSON.stringify(r) + ")"); return; }
     setCfgMsg("✓ 저장됨 — 미리보기 갱신중");
     if (frameRef.current) frameRef.current.src = "/?preview=" + Date.now();
     setTimeout(() => setCfgMsg(""), 2500);

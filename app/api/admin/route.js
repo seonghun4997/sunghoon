@@ -60,7 +60,7 @@ export async function POST(req) {
       const { error } = await client
         .from("site_config")
         .upsert({ id: 1, data: b.data || {}, updated_at: new Date().toISOString() });
-      if (error) return NextResponse.json({ error: "db" }, { status: 500 });
+      if (error) return NextResponse.json({ error: "db", detail: error.message }, { status: 500 });
       return NextResponse.json({ ok: true });
     }
 
