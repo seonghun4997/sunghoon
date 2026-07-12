@@ -204,6 +204,20 @@ export default function Admin() {
     load();
   }
 
+  const [testTo, setTestTo] = useState("");
+  const [testMsg, setTestMsg] = useState("");
+  const [testBusy, setTestBusy] = useState(false);
+  async function testSms() {
+    setTestBusy(true); setTestMsg("발송 요청중...");
+    try {
+      const r = await post({ action: "testsms", to: testTo });
+      if (r.error === "no_sms") setTestMsg("🔴 솔라피 열쇠가 아직 없습니다 — Vercel 환경변수 3개 추가 + 재배포 필요");
+      else if (r.ok) setTestMsg("✓ 발송 요청 성공 (" + (r.detail || "") + ") — 몇 초 안에 문자가 와야 정상. 안 오면 솔라피 잔액/발신번호 등록을 확인하세요.");
+      else setTestMsg("❌ 발송 실패 — " + (r.detail || "") + (r.raw ? " · 응답: " + r.raw : ""));
+    } catch (e) { setTestMsg("❌ 네트워크 오류"); }
+    setTestBusy(false);
+  }
+
   async function broadcast() {
     const n = (data?.subscribers || []).filter((s) => s.approved).length;
     if (!bcText.trim()) return;
@@ -846,8 +860,15 @@ export default function Admin() {
           <div className="card">
             <div className="sechead"><h2>단체 문자</h2><span className="en">BROADCAST</span></div>
             <div className="adm-msg" style={{ padding: "0 0 12px", textAlign: "left" }}>
-              승인된 구독자 전원에게 발송됩니다. 사업 소식·인맥 업데이트 알림용.
+              {data.smsReady
+                ? "🟢 솔라피 연결됨 — 승인된 구독자 전원에게 발송됩니다. 사업 소식·인맥 업데이트 알림용."
+                : "🔴 솔라피 미연결 — Vercel에 SOLAPI_API_KEY · SOLAPI_API_SECRET · SOLAPI_SENDER 3개를 추가하고 재배포하면 켜집니다."}
             </div>
+            <div className="ed-row" style={{ marginBottom: 10 }}>
+              <input style={{ flex: 1, minWidth: 0 }} inputMode="tel" placeholder="테스트 받을 번호 (예: 내 번호)" value={testTo} onChange={(e) => setTestTo(e.target.value)} />
+              <button className="sm ghost" disabled={testTo.replace(/\D/g, "").length < 10 || testBusy} onClick={testSms}>{testBusy ? "발송중..." : "테스트 발송"}</button>
+            </div>
+            {testMsg && <div className="adm-msg" style={{ padding: "0 0 10px", textAlign: "left" }}>{testMsg}</div>}
             <textarea rows={3} value={bcText} maxLength={1000} style={{ resize: "vertical" }}
               placeholder="예: [전성훈 상태창] 패치노트 v1.2 — AI 사주 플랫폼 오픈했습니다. sunghoon-nine.vercel.app"
               onChange={(e) => setBcText(e.target.value)} />

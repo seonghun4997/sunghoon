@@ -93,6 +93,22 @@ export async function POST(req) {
       return NextResponse.json({ ok: true });
     }
 
+    // ★ v43: 테스트 문자 1건 발송 — 연동 확인용, 솔라피의 응답 원문 일부를 그대로 보여줌
+    if (b.action === "testsms") {
+      const to = String(b.to || "").replace(/\D/g, "");
+      if (to.length < 10) return NextResponse.json({ error: "invalid" }, { status: 400 });
+      const r = await sendSMS(to, String(b.text || "[전성훈 상태창] 문자 연동 테스트입니다."));
+      if (r.skipped) return NextResponse.json({ error: "no_sms" });
+      let detail = "";
+      try {
+        const g = r.data?.groupInfo?.count || {};
+        detail = "등록 " + (g.total ?? "?") + "건";
+        const failed = (r.data?.failedMessageList || []);
+        if (failed.length) detail += " · 실패: " + (failed[0].statusMessage || failed[0].statusCode || "원인미상");
+      } catch (e) {}
+      return NextResponse.json({ ok: !!r.ok, detail, raw: r.ok ? undefined : JSON.stringify(r.data || r.error || "").slice(0, 300) });
+    }
+
     // 승인된 구독자 전체 문자 발송
     if (b.action === "broadcast") {
       const text = String(b.text || "").trim();
