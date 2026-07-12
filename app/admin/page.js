@@ -566,8 +566,8 @@ export default function Admin() {
               </details>
 
               {/* 인맥 (1~4촌) */}
-              <details className="ed-group">
-                <summary>인맥 (1~4촌)</summary>
+              <details className="ed-group" open>
+                <summary>🧑‍🤝‍🧑 인맥 편집 — 1~4촌 멘트·인물 추가/수정</summary>
                 <div className="fgroup">
                   <div className="flabel">인맥 설명 문구</div>
                   <input value={cfg.texts.netDesc} onChange={(e) => setText("netDesc", e.target.value)} />
