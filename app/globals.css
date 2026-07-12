@@ -255,3 +255,12 @@ input:focus,textarea:focus,select:focus{border-color:var(--gold)}
 .mini-act:active{transform:translateY(2px)}
 .biz .stage{margin-left:auto}
 .person .mini-act{margin-left:auto}
+
+/* v42 등급별 공개 */
+.gate{text-align:center;padding:26px 14px;border:1px dashed var(--line);border-radius:12px;margin-top:4px}
+.gate-ic{font-size:30px}
+.gate-tx{font-size:13.5px;color:var(--dim);margin:10px 0 14px;line-height:1.55}
+.gate button{display:block;width:100%;margin-top:8px}
+.bizdetail{margin-top:7px;font-size:12.5px;line-height:1.6;color:var(--gold);background:rgba(255,200,80,.06);border:1px solid rgba(255,200,80,.25);border-radius:8px;padding:8px 10px;width:100%}
+.linklike{background:none;border:none;box-shadow:none;color:var(--gold);text-decoration:underline;font-size:12.5px;padding:0;display:inline}
+.btnrow{display:flex;flex-direction:column;gap:8px}

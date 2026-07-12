@@ -731,6 +731,9 @@ export default function Admin() {
                       </select>
                     </div>
                     <div className="ed-row">
+                      <textarea rows={2} style={{ flex: 1, minWidth: 0 }} value={b.desc || ""} onChange={(e) => bizOps.set(i, "desc", e.target.value)} placeholder="3촌에게만 보이는 상세 설명 (줄바꿈 가능)" />
+                    </div>
+                    <div className="ed-row">
                       <input style={{ flex: 1, minWidth: 0 }} value={b.tag} onChange={(e) => bizOps.set(i, "tag", e.target.value)} placeholder="이커머스 · 3개 · 2024년~" />
                       <button className="sm ghost" onClick={() => bizOps.move(i, -1)}>▲</button>
                       <button className="sm ghost" onClick={() => bizOps.move(i, 1)}>▼</button>
@@ -738,7 +741,7 @@ export default function Admin() {
                     </div>
                   </div>
                 ))}
-                <button className="sm" onClick={() => bizOps.add({ icon: "🆕", name: "새 사업", tag: "카테고리 · 1개", stage: "초기" })}>+ 사업 추가</button>
+                <button className="sm" onClick={() => bizOps.add({ icon: "🆕", name: "새 사업", tag: "카테고리 · 1개", stage: "초기", desc: "" })}>+ 사업 추가</button>
               </details>
 
               {/* 인맥 (1~4촌) */}
@@ -801,6 +804,20 @@ export default function Admin() {
                   ["ctaWelcome", "환영 문구"],
                   ["ctaLocation", "위치 문구"],
                   ["caughtLine", "포획 성공 대사"],
+                  ["bizGateDesc", "사업 잠금(미구독) 안내 문구"],
+                  ["netGateDesc", "인맥 잠금(미구독) 안내 문구"],
+                  ["gateSubBtn", "잠금화면 구독 버튼"],
+                  ["gateUnlockBtn", "잠금화면 인증 버튼"],
+                  ["unlockTitle", "구독자 인증 팝업 제목"],
+                  ["unlockDesc", "구독자 인증 팝업 설명"],
+                  ["unlockFail", "인증 실패 문구"],
+                  ["lockBiz3Title", "사업 상세 3촌 안내 제목"],
+                  ["lockBiz3Desc", "사업 상세 3촌 안내 내용"],
+                  ["lockNet3Title", "소개 신청 3촌 안내 제목"],
+                  ["lockNet3Desc", "소개 신청 3촌 안내 내용"],
+                  ["introReqTitle", "소개 신청 팝업 제목"],
+                  ["introReqDesc", "소개 신청 팝업 설명"],
+                  ["introPhone", "소개 신청 수신 번호"],
                   ["lockBizTitle", "사업 잠금 팝업 제목"],
                   ["lockBizDesc", "사업 잠금 팝업 내용"],
                   ["lockNetTitle", "소개받기 팝업 제목"],

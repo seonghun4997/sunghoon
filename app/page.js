@@ -29,6 +29,12 @@ export default function Home() {
   const [form, setForm] = useState({ name: "", phone: "", job: "", intro: "" });
   const [toastMsg, setToastMsg] = useState("");
   const [lock, setLock] = useState(null); // {title, desc} — 구독 유도 모달
+  const [viewer, setViewer] = useState(null); // {chon, name} — 인증된 구독자 등급 (null = 미구독 방문자)
+  const [unlock, setUnlock] = useState(false); // 구독자 인증 모달
+  const [uPhone, setUPhone] = useState("");
+  const [uMsg, setUMsg] = useState("");
+  const [uBusy, setUBusy] = useState(false);
+  const [intro, setIntro] = useState(null); // 소개받기 신청 모달 — 대상 직업명
 
   const T = cfg.texts;
 
@@ -107,6 +113,16 @@ export default function Home() {
         .catch(() => {});
     };
     loadData();
+    // ★ v42: 이전에 인증한 번호가 있으면 자동 재인증 (승인 상태가 바뀌면 자동 반영)
+    try {
+      const saved = localStorage.getItem("viewer_phone");
+      if (saved) {
+        fetch("/api/whoami", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: saved }), cache: "no-store" })
+          .then((r) => r.json())
+          .then((d) => { if (d.ok) setViewer({ chon: d.chon, name: d.name }); else localStorage.removeItem("viewer_phone"); })
+          .catch(() => {});
+      }
+    } catch (e) {}
     const onVisible = () => { if (document.visibilityState === "visible") loadData(); };
     const timer = setInterval(loadData, 10000); // 10초마다 자동 갱신 (실시간 연동)
     window.addEventListener("focus", onVisible);
@@ -125,6 +141,33 @@ export default function Home() {
 
   const canSubmit =
     form.name.trim() && form.phone.replace(/\D/g, "").length >= 10 && form.job.trim();
+
+  async function doUnlock() {
+    setUBusy(true); setUMsg("");
+    try {
+      const r = await fetch("/api/whoami", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: uPhone }), cache: "no-store" });
+      const d = await r.json();
+      if (d.ok) {
+        setViewer({ chon: d.chon, name: d.name });
+        try { localStorage.setItem("viewer_phone", uPhone); } catch (e) {}
+        setUnlock(false); setUPhone("");
+        toast("🔓 " + d.chon + "촌 등급으로 열렸습니다");
+      } else {
+        setUMsg(T.unlockFail);
+      }
+    } catch (e) { setUMsg("확인 실패 — 잠시 후 다시 시도해주세요"); }
+    setUBusy(false);
+  }
+
+  // 잠금 게이트 공용 패널 (미구독 방문자에게 표시)
+  const Gate = ({ desc }) => (
+    <div className="gate">
+      <div className="gate-ic">🔒</div>
+      <div className="gate-tx">{desc}</div>
+      <button className="mp" onClick={openSub}>{T.gateSubBtn}</button>
+      <button className="ghost" onClick={() => { setUMsg(""); setUnlock(true); }}>{T.gateUnlockBtn}</button>
+    </div>
+  );
 
   async function doSub() {
     setSending(true);
@@ -260,15 +303,24 @@ export default function Home() {
       <section className="card" key="biz">
         <div className="sechead"><h2>{T.bizTitle}</h2><span className="en">BUSINESS</span></div>
         {T.bizDesc?.trim() && <div className="desc">{T.bizDesc}</div>}
-        {cfg.biz.map((b, i) => (
-          <div className="biz" key={i}>
+        {!viewer ? (
+          <Gate desc={T.bizGateDesc} />
+        ) : cfg.biz.map((b, i) => (
+          <div className="biz" key={i} style={viewer.chon <= 3 ? { flexWrap: "wrap" } : undefined}>
             <span className="ic">{b.icon}</span>
-            <div style={{ minWidth: 0 }}><div className="nm">{b.name}</div><div className="tg">{b.tag}</div></div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className="nm">{b.name}</div><div className="tg">{b.tag}</div>
+              {viewer.chon <= 3 && b.desc?.trim() && (
+                <div className="bizdetail">{lines(b.desc).map((l, j) => <div key={j}>{l}</div>)}</div>
+              )}
+            </div>
             <span className={`stage ${STAGE_CLS[b.stage] || "early"}`}>{b.stage}</span>
-            <button className="mini-act" onClick={() => setLock({ title: T.lockBizTitle, desc: T.lockBizDesc })}>자세히 🔒</button>
+            {viewer.chon === 4 && (
+              <button className="mini-act" onClick={() => setLock({ title: T.lockBiz3Title, desc: T.lockBiz3Desc, noSub: true })}>자세히 🔒</button>
+            )}
           </div>
         ))}
-        {T.bizNote?.trim() && <div className="note">{T.bizNote}</div>}
+        {viewer ? <div className="note">🔓 지금 {viewer.chon}촌 등급으로 보는 중{viewer.chon === 4 ? " — 상세 설명은 3촌부터" : ""} · <button className="linklike" onClick={() => { try { localStorage.removeItem("viewer_phone"); } catch (e) {} setViewer(null); }}>번호 변경</button></div> : (T.bizNote?.trim() && <div className="note">{T.bizNote}</div>)}
       </section>
     ),
 
@@ -292,7 +344,9 @@ export default function Home() {
       <section className="card" key="network">
         <div className="sechead"><h2>인맥</h2><span className="en">NETWORK</span></div>
         {T.netDesc?.trim() && <div className="desc">{T.netDesc}</div>}
-        {cfg.network.map((g) => {
+        {!viewer ? (
+          <Gate desc={T.netGateDesc} />
+        ) : cfg.network.map((g) => {
           const chon = g.chon;
           const rule = g.rule;
           const dyn = membersOf(chon);
@@ -316,7 +370,7 @@ export default function Home() {
                         <div className="person" key={"4-" + i}>
                           <span className="ic">{ic}</span>
                           <div style={{ minWidth: 0 }}><div className="nm">{nm}</div><div className="ds">{ds}</div></div>
-                          <button className="mini-act" onClick={() => setLock({ title: T.lockNetTitle, desc: T.lockNetDesc })}>소개받기</button>
+                          <button className="mini-act" onClick={() => viewer.chon <= 3 ? setIntro(nm) : setLock({ title: T.lockNet3Title, desc: T.lockNet3Desc, noSub: true })}>소개받기</button>
                         </div>
                       ))}
                     </div>
@@ -335,7 +389,7 @@ export default function Home() {
                   <div className="person" key={chon + "-" + i}>
                     <span className="ic">{ic}</span>
                     <div style={{ minWidth: 0 }}><div className="nm">{nm}</div><div className="ds">{ds}</div></div>
-                    <button className="mini-act" onClick={() => setLock({ title: T.lockNetTitle, desc: T.lockNetDesc })}>소개받기</button>
+                    <button className="mini-act" onClick={() => viewer.chon <= 3 ? setIntro(nm) : setLock({ title: T.lockNet3Title, desc: T.lockNet3Desc, noSub: true })}>소개받기</button>
                   </div>
                 ))
               )}
@@ -443,6 +497,50 @@ export default function Home() {
         </div>
       </div>
 
+      {/* 구독자 인증(잠금해제) 모달 */}
+      {unlock && (
+        <div className="modal-bg" onClick={(e) => e.target === e.currentTarget && setUnlock(false)}>
+          <div className="modal">
+            <div className="sechead" style={{ border: "none", paddingBottom: 0, marginBottom: 6 }}>
+              <h2 style={{ fontSize: 17 }}>{T.unlockTitle}</h2>
+              <span className="en" style={{ color: "var(--gold)" }}>UNLOCK</span>
+            </div>
+            <div className="desc">{T.unlockDesc}</div>
+            <div className="fgroup">
+              <div className="flabel">전화번호</div>
+              <input value={uPhone} inputMode="tel" placeholder="010-0000-0000"
+                onChange={(e) => setUPhone(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !uBusy && doUnlock()} />
+            </div>
+            {uMsg && <div style={{ color: "#ff8f8f", fontSize: 13, marginTop: 8 }}>{uMsg}</div>}
+            <div className="btnrow" style={{ marginTop: 14 }}>
+              <button className="mp" disabled={uBusy || uPhone.replace(/\D/g, "").length < 10} onClick={doUnlock}>{uBusy ? "확인 중..." : "🔓 열기"}</button>
+              <button className="ghost" onClick={() => setUnlock(false)}>닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 소개받기 신청 모달 (3촌 이상) */}
+      {intro && (
+        <div className="modal-bg" onClick={(e) => e.target === e.currentTarget && setIntro(null)}>
+          <div className="modal">
+            <div className="sechead" style={{ border: "none", paddingBottom: 0, marginBottom: 6 }}>
+              <h2 style={{ fontSize: 17 }}>{T.introReqTitle}</h2>
+              <span className="en" style={{ color: "var(--gold)" }}>INTRO</span>
+            </div>
+            <div className="desc">{T.introReqDesc}</div>
+            <div className="note" style={{ textAlign: "left", marginTop: 8 }}>요청 대상: <b style={{ color: "var(--gold)" }}>{intro}</b></div>
+            <div className="btnrow" style={{ marginTop: 14 }}>
+              <a className="mp" style={{ textAlign: "center", textDecoration: "none", display: "block" }}
+                href={"sms:" + String(T.introPhone || "").replace(/\D/g, "") + "?&body=" + encodeURIComponent("[소개요청] " + intro + " — (목적을 적어주세요)")}
+              >💬 문자로 신청하기</a>
+              <button className="ghost" onClick={() => setIntro(null)}>닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 구독 모달 */}
       {subOpen && (
         <div className="modal-bg" onClick={(e) => e.target === e.currentTarget && setSubOpen(false)}>
@@ -504,7 +602,7 @@ export default function Home() {
             <div style={{ fontWeight: 800, fontSize: 18, marginTop: 10 }}>{lock.title}</div>
             <div style={{ fontSize: 14, color: "var(--dim)", marginTop: 8, lineHeight: 1.8 }}>{lock.desc}</div>
             <div style={{ marginTop: 18, display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-              <button className="mp" onClick={() => { setLock(null); openSub(); }}>{T.lockBtn}</button>
+              {!lock.noSub && <button className="mp" onClick={() => { setLock(null); openSub(); }}>{T.lockBtn}</button>}
               <button className="ghost" onClick={() => setLock(null)}>닫기</button>
             </div>
           </div>
