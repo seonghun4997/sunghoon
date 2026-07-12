@@ -41,6 +41,18 @@ export default function Admin() {
   const [conflict, setConflict] = useState(false); // 다른 탭이 먼저 저장한 충돌 상태
   const setDirty = (v) => { dirtyRef.current = v; setCfgDirty(v); };
 
+  // ★ 킬스위치: 과거 사이트가 브라우저에 남긴 서비스워커·캐시를 전부 제거
+  useEffect(() => {
+    try {
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => r.unregister())).catch(() => {});
+      }
+      if (typeof caches !== "undefined" && caches.keys) {
+        caches.keys().then((ks) => ks.forEach((k) => caches.delete(k))).catch(() => {});
+      }
+    } catch (e) {}
+  }, []);
+
   // 저장 안 된 수정사항이 있으면 창을 닫거나 새로고침할 때 경고
   useEffect(() => {
     const h = (e) => {

@@ -56,6 +56,17 @@ export default function Home() {
   }, [T.dialog]);
 
   useEffect(() => {
+    // ★ 킬스위치: 과거 사이트가 브라우저에 남긴 서비스워커·캐시를 전부 제거
+    //   (서버를 아무리 고쳐도 브라우저가 옛날 응답을 돌려주던 원인 차단)
+    try {
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => r.unregister())).catch(() => {});
+      }
+      if (typeof caches !== "undefined" && caches.keys) {
+        caches.keys().then((ks) => ks.forEach((k) => caches.delete(k))).catch(() => {});
+      }
+    } catch (e) {}
+
     const src = new URLSearchParams(location.search).get("src");
     const ping = () =>
       fetch("/api/visit", {

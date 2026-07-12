@@ -29,12 +29,12 @@ export async function GET() {
         notes: notes || [],
         ...(subErr ? { subscribersError: subErr.message } : {}),
       },
-      { headers: { "Cache-Control": "no-store" } }
+      { headers: { "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate", "CDN-Cache-Control": "no-store", "Vercel-CDN-Cache-Control": "no-store" } }
     );
   } catch (e) {
     return NextResponse.json(
       { members: [], total: 0, notes: [], error: String(e.message || e) },
-      { headers: { "Cache-Control": "no-store" } }
+      { headers: { "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate", "CDN-Cache-Control": "no-store", "Vercel-CDN-Cache-Control": "no-store" } }
     );
   }
 }
