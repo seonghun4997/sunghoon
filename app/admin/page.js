@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { SECTION_LABELS, mergeConfig, BUILD } from "@/lib/config";
+import { SECTION_LABELS, mergeConfig, BUILD, CANONICAL_HOST } from "@/lib/config";
 
 // 오류 시 진단 페이지로 바로 가는 링크 — 캡처해서 보내면 원인 파악 가능
 function DiagLink() {
@@ -38,6 +38,11 @@ export default function Admin() {
   const cfgRef = useRef(null); // 항상 최신 편집 상태를 담는 참조 (한글 입력 버그 방지용)
   const baseAtRef = useRef(null); // 이 탭이 불러온 설정의 버전 번호(#) — 충돌 감지 기준
   const dirtyRef = useRef(false); // cfgDirty의 실시간 참조
+  const [hostOk, setHostOk] = useState(null); // ★ 공식 주소인지 검사 (중복 배포 어드민 차단)
+  useEffect(() => {
+    const h = location.host;
+    setHostOk(h === CANONICAL_HOST || h.startsWith("localhost") || h.startsWith("127.0.0.1"));
+  }, []);
   const [conflict, _setConflict] = useState(false); // 다른 탭이 먼저 저장한 충돌 상태
   const conflictRef = useRef(false);
   const setConflict = (v) => { conflictRef.current = v; _setConflict(v); };
@@ -376,6 +381,22 @@ export default function Admin() {
 
   return (
     <div className="wrap" style={{ paddingBottom: 80 }}>
+      {hostOk === false && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(15,17,38,0.97)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div style={{ maxWidth: 440, textAlign: "center", background: "var(--card)", border: "2px solid var(--red)", borderRadius: 16, padding: "32px 24px" }}>
+            <div style={{ fontSize: 40 }}>⛔</div>
+            <h2 style={{ margin: "12px 0", color: "var(--red)" }}>잘못된 주소의 어드민입니다</h2>
+            <p style={{ color: "var(--dim)", fontSize: 14, lineHeight: 1.8 }}>
+              지금 주소: <b>{typeof location !== "undefined" ? location.host : ""}</b><br />
+              여기서 저장하면 <b>실제 사이트에 반영되지 않습니다.</b><br />
+              반드시 공식 어드민에서만 수정해주세요.
+            </p>
+            <a href={"https://" + CANONICAL_HOST + "/admin"} style={{ display: "inline-block", marginTop: 12, background: "var(--gold)", color: "#17182E", fontWeight: 800, borderRadius: 10, padding: "12px 20px", textDecoration: "none" }}>
+              👉 공식 어드민으로 이동
+            </a>
+          </div>
+        </div>
+      )}
       <div className="eyebrow" style={{ color: "var(--gold)" }}>— ADMIN CONSOLE · BUILD {BUILD} —</div>
 
       {!authed ? (
