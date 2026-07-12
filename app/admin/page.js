@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { SECTION_LABELS, mergeConfig } from "@/lib/config";
 
 export default function Admin() {
@@ -18,6 +18,16 @@ export default function Admin() {
   const [cfgSavedAt, setCfgSavedAt] = useState(null);
   const [cfgMsg, setCfgMsg] = useState("");
   const frameRef = useRef(null);
+  const genRef = useRef(0); // 편집 세대 카운터 — 저장 중 타이핑해도 안전하게
+
+  // 저장 안 된 수정사항이 있으면 창을 닫거나 새로고침할 때 경고
+  useEffect(() => {
+    const h = (e) => {
+      if (cfgDirty) { e.preventDefault(); e.returnValue = ""; }
+    };
+    window.addEventListener("beforeunload", h);
+    return () => window.removeEventListener("beforeunload", h);
+  }, [cfgDirty]);
 
   async function load(k = key) {
     try {
@@ -50,28 +60,37 @@ export default function Admin() {
   }
 
   async function save(s) {
-    const e = edits[s.id] || {};
-    const chon = e.chon ?? s.chon;
-    const approved = e.approved ?? (s.approved ? "Y" : "N");
-    const res = await post({ id: s.id, chon: parseInt(chon, 10), approved: approved === "Y" || approved === true });
-    setSavedId(s.id);
-    setTimeout(() => setSavedId(null), 1500);
-    if (res.smsSent) alert("승인 완료 — 환영 문자가 발송됐습니다.");
-    load();
+    try {
+      const e = edits[s.id] || {};
+      const chon = e.chon ?? s.chon;
+      const approved = e.approved ?? (s.approved ? "Y" : "N");
+      const res = await post({ id: s.id, chon: parseInt(chon, 10), approved: approved === "Y" || approved === true });
+      if (!res?.ok) { alert("저장 실패 — 잠시 후 다시 시도해주세요."); return; }
+      setSavedId(s.id);
+      setTimeout(() => setSavedId(null), 1500);
+      if (res.smsSent) alert("승인 완료 — 환영 문자가 발송됐습니다.");
+      load();
+    } catch (e) {
+      alert("네트워크 오류 — 인터넷 연결을 확인하고 다시 시도해주세요.");
+    }
   }
 
   async function addNote() {
     if (!noteVer.trim() || !noteContent.trim()) return;
-    const r = await post({ action: "addnote", version: noteVer.trim(), content: noteContent.trim() });
-    if (r.error === "db") { alert("저장 실패 — Supabase에 patchnotes 테이블이 없을 수 있습니다. SQL을 먼저 실행해주세요."); return; }
-    if (!r.ok) { alert("저장 실패 — 잠시 후 다시 시도해주세요."); return; }
-    setNoteVer(""); setNoteContent("");
-    load();
+    try {
+      const r = await post({ action: "addnote", version: noteVer.trim(), content: noteContent.trim() });
+      if (r.error === "db") { alert("저장 실패 — Supabase에 patchnotes 테이블이 없을 수 있습니다. SQL을 먼저 실행해주세요."); return; }
+      if (!r.ok) { alert("저장 실패 — 잠시 후 다시 시도해주세요."); return; }
+      setNoteVer(""); setNoteContent("");
+      load();
+    } catch (e) {
+      alert("네트워크 오류 — 인터넷 연결을 확인하고 다시 시도해주세요.");
+    }
   }
 
   async function delNote(id) {
     if (!confirm("이 패치노트를 삭제할까요?")) return;
-    await post({ action: "delnote", id });
+    try { await post({ action: "delnote", id }); } catch (e) { alert("네트워크 오류 — 다시 시도해주세요."); }
     load();
   }
 
@@ -80,7 +99,9 @@ export default function Admin() {
     if (!bcText.trim()) return;
     if (!confirm(`승인된 구독자 ${n}명에게 문자를 발송합니다. 진행할까요?`)) return;
     setBcMsg("발송중...");
-    const r = await post({ action: "broadcast", text: bcText.trim() });
+    let r;
+    try { r = await post({ action: "broadcast", text: bcText.trim() }); }
+    catch (e) { setBcMsg("❌ 네트워크 오류 — 인터넷 연결을 확인해주세요."); return; }
     if (r.error === "no_sms") setBcMsg("❌ Solapi 환경변수(SOLAPI_API_KEY 등)가 아직 설정되지 않았습니다.");
     else if (r.error === "no_target") setBcMsg("❌ 승인된 구독자가 없습니다.");
     else if (r.ok) { setBcMsg(`✓ ${r.count}명에게 발송 완료`); setBcText(""); }
@@ -88,7 +109,7 @@ export default function Admin() {
   }
 
   /* ── 사이트 편집기 헬퍼 ── */
-  const updateCfg = (next) => { setCfg(next); setCfgDirty(true); };
+  const updateCfg = (next) => { genRef.current++; setCfg(next); setCfgDirty(true); };
   const setText = (k, v) => updateCfg({ ...cfg, texts: { ...cfg.texts, [k]: v } });
   const setGauge = (g, field, v) => updateCfg({ ...cfg, [g]: { ...cfg[g], [field]: v } });
   const moveSection = (i, dir) => {
@@ -122,6 +143,40 @@ export default function Admin() {
   const statOps = cfg ? listOps("stats") : null;
   const bizOps = cfg ? listOps("biz") : null;
 
+  /* ── 인맥(1~4촌) 편집 헬퍼 ── */
+  const setNetRule = (gi, v) => {
+    const network = cfg.network.map((g, i) => (i === gi ? { ...g, rule: v } : g));
+    updateCfg({ ...cfg, network });
+  };
+  const netPeople = (gi) => ({
+    set: (pi, field, v) => {
+      const network = cfg.network.map((g, i) =>
+        i === gi ? { ...g, people: g.people.map((p, j) => (j === pi ? { ...p, [field]: v } : p)) } : g
+      );
+      updateCfg({ ...cfg, network });
+    },
+    move: (pi, dir) => {
+      const people = [...cfg.network[gi].people];
+      const j = pi + dir;
+      if (j < 0 || j >= people.length) return;
+      [people[pi], people[j]] = [people[j], people[pi]];
+      const network = cfg.network.map((g, i) => (i === gi ? { ...g, people } : g));
+      updateCfg({ ...cfg, network });
+    },
+    del: (pi) => {
+      const network = cfg.network.map((g, i) =>
+        i === gi ? { ...g, people: g.people.filter((_, j) => j !== pi) } : g
+      );
+      updateCfg({ ...cfg, network });
+    },
+    add: () => {
+      const network = cfg.network.map((g, i) =>
+        i === gi ? { ...g, people: [...g.people, { icon: "🙋", job: "직함", desc: "한 줄 소개" }] } : g
+      );
+      updateCfg({ ...cfg, network });
+    },
+  });
+
   // 키 순서 무시하고 내용만 비교 (디비는 JSON 키 순서를 재정렬해서 저장함)
   function canon(v) {
     if (Array.isArray(v)) return v.map(canon);
@@ -133,19 +188,55 @@ export default function Admin() {
     return v;
   }
 
+  // 저장 전 숫자값 정리 (빈칸·이상한 값 → 안전한 범위로)
+  function sanitizeCfg(c) {
+    const clamp = (x, lo, hi, fb) => {
+      const n = parseInt(x, 10);
+      return isNaN(n) ? fb : Math.max(lo, Math.min(hi, n));
+    };
+    return {
+      ...c,
+      hp: { ...c.hp, v: clamp(c.hp.v, 0, 100, 50) },
+      mp: { ...c.mp, v: clamp(c.mp.v, 0, 100, 50) },
+      stats: (c.stats || []).map((s) => ({ ...s, v: clamp(s.v, 1, 10, 5) })),
+    };
+  }
+
   async function saveConfig() {
     setCfgMsg("저장중...");
-    const sentCfg = cfg;
-    const r = await post({ action: "saveconfig", data: cfg });
-    if (r.error === "db") { setCfgMsg("❌ 저장 실패 — " + (r.detail || "디비 오류")); return; }
-    if (!r.ok || !r.saved) { setCfgMsg("❌ 저장 실패 (" + JSON.stringify(r).slice(0, 120) + ")"); return; }
+    const gen = genRef.current;             // 저장 시작 시점의 편집 세대
+    const sentCfg = sanitizeCfg(cfg);       // 숫자 정리된 스냅샷을 보냄
+    let r = null;
+    // 네트워크 오류 시 1회 자동 재시도
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        r = await post({ action: "saveconfig", data: sentCfg });
+        break;
+      } catch (e) {
+        if (attempt === 2) {
+          setCfgMsg("❌ 네트워크 오류 — 인터넷 연결을 확인하고 다시 저장을 눌러주세요. 수정한 내용은 이 화면에 그대로 남아있습니다.");
+          return;
+        }
+        await new Promise((res) => setTimeout(res, 800));
+      }
+    }
+    if (r?.error === "db") { setCfgMsg("❌ 저장 실패 — " + (r.detail || "디비 오류") + " · 잠시 후 다시 저장을 눌러주세요."); return; }
+    if (!r?.ok || !r?.saved) { setCfgMsg("❌ 저장 실패 — 잠시 후 다시 저장을 눌러주세요. 수정한 내용은 남아있습니다."); return; }
+
     const back = mergeConfig(r.saved);
-    setCfg(back);
-    setCfgDirty(false);
+    const verified = JSON.stringify(canon(back)) === JSON.stringify(canon(mergeConfig(sentCfg)));
     setCfgSavedAt(r.at || null);
     if (frameRef.current) frameRef.current.src = "/?preview=" + Date.now();
-    if (JSON.stringify(canon(back)) !== JSON.stringify(canon(sentCfg))) {
-      setCfgMsg("⚠️ 저장은 됐지만 일부 값이 다르게 기록됐어요 — 이 화면을 캡처해주세요");
+
+    // 저장하는 동안 추가로 수정한 게 있으면 화면의 수정본을 보호 (덮어쓰지 않음)
+    if (genRef.current !== gen) {
+      setCfgMsg("✓ 저장 완료 — 저장 중에 수정한 내용이 더 있어요. 마저 고친 뒤 한 번 더 저장해주세요.");
+      return;
+    }
+    setCfg(back);
+    setCfgDirty(false);
+    if (!verified) {
+      setCfgMsg("⚠️ 저장은 됐지만 기록이 일부 달라 보여요 — 새로고침(F5) 후 값을 확인해주세요.");
       return;
     }
     setCfgMsg("✓ 디비 저장·검증 완료 — 사이트를 새로고침하면 반영됩니다");
@@ -356,7 +447,14 @@ export default function Admin() {
                       <span style={{ width: 40, fontWeight: 800, fontFamily: "var(--pixel)", fontSize: 11, color: g === "hp" ? "#FF5B5B" : "var(--mp)" }}>{g.toUpperCase()}</span>
                       <input type="number" min={0} max={100} style={{ width: 90, flexShrink: 0 }}
                         value={cfg[g].v}
-                        onChange={(e) => setGauge(g, "v", Math.max(0, Math.min(100, parseInt(e.target.value || 0, 10))))} />
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          setGauge(g, "v", raw === "" ? "" : Math.max(0, Math.min(100, parseInt(raw, 10) || 0)));
+                        }}
+                        onBlur={(e) => {
+                          const n = parseInt(e.target.value, 10);
+                          setGauge(g, "v", isNaN(n) ? 50 : Math.max(0, Math.min(100, n)));
+                        }} />
                       <input style={{ flex: 1, minWidth: 0 }} placeholder="설명 문구"
                         value={cfg[g].cap}
                         onChange={(e) => setGauge(g, "cap", e.target.value)} />
@@ -429,11 +527,58 @@ export default function Admin() {
                 <button className="sm" onClick={() => bizOps.add({ icon: "🆕", name: "새 사업", tag: "카테고리 · 1개", stage: "초기" })}>+ 사업 추가</button>
               </details>
 
+              {/* 인맥 (1~4촌) */}
+              <details className="ed-group">
+                <summary>인맥 (1~4촌)</summary>
+                <div className="fgroup">
+                  <div className="flabel">인맥 설명 문구</div>
+                  <input value={cfg.texts.netDesc} onChange={(e) => setText("netDesc", e.target.value)} />
+                </div>
+                <div className="fgroup">
+                  <div className="flabel">빈 슬롯 문구 (1~3촌에 아무도 없을 때)</div>
+                  <input value={cfg.texts.netEmpty} onChange={(e) => setText("netEmpty", e.target.value)} />
+                </div>
+                <div className="fgroup">
+                  <div className="flabel">4촌 비어있을 때 문구</div>
+                  <input value={cfg.texts.net4Empty} onChange={(e) => setText("net4Empty", e.target.value)} />
+                </div>
+                {cfg.network.map((g, gi) => {
+                  const ops = netPeople(gi);
+                  return (
+                    <div className="ed-biz" key={g.chon}>
+                      <div className="ed-row">
+                        <span className={`chip t${g.chon}`} style={{ flexShrink: 0 }}>{g.chon}촌</span>
+                        <input style={{ flex: 1, minWidth: 0 }} value={g.rule} placeholder="촌수 기준 멘트"
+                          onChange={(e) => setNetRule(gi, e.target.value)} />
+                      </div>
+                      {(g.people || []).map((p, pi) => (
+                        <div className="ed-row" key={pi}>
+                          <input style={{ width: 52, flexShrink: 0, textAlign: "center" }} value={p.icon}
+                            onChange={(e) => ops.set(pi, "icon", e.target.value)} />
+                          <input style={{ width: 105, flexShrink: 0 }} value={p.job} placeholder="직함"
+                            onChange={(e) => ops.set(pi, "job", e.target.value)} />
+                          <input style={{ flex: 1, minWidth: 0 }} value={p.desc} placeholder="한 줄 소개"
+                            onChange={(e) => ops.set(pi, "desc", e.target.value)} />
+                          <button className="sm ghost" onClick={() => ops.move(pi, -1)}>▲</button>
+                          <button className="sm ghost" onClick={() => ops.move(pi, 1)}>▼</button>
+                          <button className="sm ghost" onClick={() => ops.del(pi)}>✕</button>
+                        </div>
+                      ))}
+                      <button className="sm" onClick={ops.add}>+ {g.chon}촌 사람 추가</button>
+                      {g.chon === 4 && (
+                        <div className="adm-msg" style={{ padding: "8px 0 0", textAlign: "left", fontSize: 12 }}>
+                          승인된 구독자는 여기 목록과 별개로 촌수에 맞춰 자동으로 표시됩니다.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </details>
+
               {/* 섹션 문구 */}
               <details className="ed-group">
-                <summary>섹션 문구 (인맥·구독·포획)</summary>
+                <summary>섹션 문구 (구독·포획·잠금팝업)</summary>
                 {[
-                  ["netDesc", "인맥 설명"],
                   ["subTitle", "구독 버튼 문구"],
                   ["subDesc", "구독 설명"],
                   ["ctaLine", "포획 첫 줄"],

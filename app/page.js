@@ -7,20 +7,6 @@ const RANK = (v) => (v >= 9 ? "S" : v >= 7 ? "A" : v >= 5 ? "B" : v >= 3 ? "C" :
 // 사업 단계 → 칩 색상 클래스 (확장=금색, 고도화=초록, 성장=파랑, 초기=회색)
 const STAGE_CLS = { 확장: "expand", 고도화: "adv", 성장: "grow", 초기: "early" };
 
-const NET = [
-  [1, "사적으로 9회 이상 만난 사람", [
-    ["🛒", "커머스 마케터", "연매출 1,200억 커머스"],
-    ["🛒", "커머스 마케터", "연매출 1,000억 커머스"],
-  ]],
-  [2, "사적으로 6회 이상 만난 사람", []],
-  [3, "사적으로 3회 이상 만났거나, 1촌과 연결된 사람", [
-    ["🍜", "F&B 대표", "엑싯 2회"],
-    ["🧾", "세무사", "세무대 출신"],
-    ["⚖️", "변호사", "서울대 출신"],
-  ]],
-  [4, "사적으로 1~3회 만났거나, 구독 신청한 사람", []],
-];
-
 function ML({ t }) {
   const arr = lines(t);
   return arr.map((l, i) => (
@@ -268,9 +254,14 @@ export default function Home() {
       <section className="card" key="network">
         <div className="sechead"><h2>인맥</h2><span className="en">NETWORK</span></div>
         {T.netDesc?.trim() && <div className="desc">{T.netDesc}</div>}
-        {NET.map(([chon, rule, people]) => {
+        {cfg.network.map((g) => {
+          const chon = g.chon;
+          const rule = g.rule;
           const dyn = membersOf(chon);
-          const all = [...people, ...dyn.map((m) => ["🙋", m.job, m.intro || ""])];
+          const all = [
+            ...(g.people || []).map((p) => [p.icon, p.job, p.desc]),
+            ...dyn.map((m) => ["🙋", m.job, m.intro || ""]),
+          ];
           if (chon === 4) {
             return (
               <div className="chon" key={chon}>
@@ -280,7 +271,7 @@ export default function Home() {
                 </button>
                 {open4 && (
                   all.length === 0 ? (
-                    <div className="empty" style={{ marginTop: 8 }}>승인된 구독자가 표시되는 자리입니다</div>
+                    <div className="empty" style={{ marginTop: 8 }}>{T.net4Empty}</div>
                   ) : (
                     <div style={{ marginTop: 8 }}>
                       {all.map(([ic, nm, ds], i) => (
@@ -300,7 +291,7 @@ export default function Home() {
             <div className="chon" key={chon}>
               <div className="chonhead"><span className={`n t${chon}`}>{chon}촌</span><span className="r">{rule}</span></div>
               {all.length === 0 ? (
-                <div className="empty">빈 슬롯 — 현재 모집중</div>
+                <div className="empty">{T.netEmpty}</div>
               ) : (
                 all.map(([ic, nm, ds], i) => (
                   <div className="person" key={chon + "-" + i}>

@@ -58,9 +58,11 @@ export async function POST(req) {
 
     // 사이트 설정 저장
     if (b.action === "saveconfig") {
+      // 저장 전에 형태를 정리(병합)해서 항상 완전한 설정만 디비에 기록 → 검증 오탐·깨진 데이터 방지
+      const clean = mergeConfig(b.data || {});
       const { error } = await client
         .from("site_config")
-        .upsert({ id: 1, data: b.data || {}, updated_at: new Date().toISOString() });
+        .upsert({ id: 1, data: clean, updated_at: new Date().toISOString() });
       if (error) return NextResponse.json({ error: "db", detail: error.message }, { status: 500 });
       // 저장 직후 디비에서 다시 읽어와서 그대로 반환 (프론트가 대조 검증)
       const { data: check } = await client
