@@ -76,7 +76,7 @@ export default function Admin() {
       .then((r) => r.json())
       .then((d) => {
         if (d.config) {
-          setLive({ cfg: mergeConfig(d.config), dbHost: d.dbHost || "?", build: d.build || "?", updatedAt: d.configUpdatedAt || null, cfgV: d.configV ?? null });
+          setLive({ cfg: mergeConfig(d.config), dbHost: d.dbHost || "?", build: d.build || "?", updatedAt: d.configUpdatedAt || null, cfgV: d.configV ?? null, cfgVia: d.configVia || null });
           setLiveAt(new Date());
         }
       })
@@ -579,7 +579,7 @@ export default function Admin() {
                   <b style={{ color: "var(--gold)" }}>🔌 이 탭의 연결 상태</b>
                   <br />어드민 주소 <b>{typeof location !== "undefined" ? location.host : "?"}</b> · 서버 빌드 <b>{live.build}</b>
                   <br />연결된 디비 <b style={{ color: "var(--mp)" }}>{live.dbHost}</b>
-                  <br />설정 버전 <b style={{ color: "var(--gold)" }}>{live.cfgV != null ? "#" + live.cfgV : "#100(첫 저장 전)"}</b> · 디비 마지막 저장 <b>{live.updatedAt ? String(live.updatedAt).slice(0, 19).replace("T", " ") : "-"}</b> <span style={{ opacity: 0.7 }}>← 저장할 때마다 번호가 +1 되어야 정상</span>
+                  <br />설정 버전 <b style={{ color: "var(--gold)" }}>{live.cfgV != null ? "#" + live.cfgV : "#100(첫 저장 전)"}</b>{live.cfgVia ? <span style={{ opacity: 0.8 }}> ({live.cfgVia})</span> : null} · 디비 마지막 저장 <b>{live.updatedAt ? String(live.updatedAt).slice(0, 19).replace("T", " ") : "-"}</b> <span style={{ opacity: 0.7 }}>← 저장할 때마다 번호가 +1 되어야 정상</span>
                   <div style={{ borderTop: "1px dashed var(--line)", margin: "8px 0" }} />
                   <b style={{ color: "var(--gold)" }}>📡 사이트 실시간 값</b>
                   {liveAt && <span style={{ opacity: 0.6 }}> · {liveAt.toLocaleTimeString()} 확인 (10초마다 자동)</span>}

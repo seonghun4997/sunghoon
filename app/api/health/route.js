@@ -31,7 +31,21 @@ export async function GET() {
     report.쓰기테스트 = werr ? "❌ " + werr.message : "✅ 저장 가능";
     if (!werr) await client.from("site_config").delete().eq("id", 999);
 
-    // ★ v37: 설정 저널(patchnotes) 실전 크기 자가테스트 — 실제 설정과 비슷한 6000자를 넣었다 지워본다
+    // ★★ v38: 새 저장소(config_journal) 자가테스트 — 이게 ✅면 설정 저장은 무조건 정상
+    try {
+      const { data: t, error: e1 } = await client
+        .from("config_journal").insert({ v: 0, data: { probe: true } }).select("id").single();
+      if (e1) {
+        report.새저장소_테스트 = /does not exist|schema cache/i.test(e1.message)
+          ? "⚠️ 아직 테이블 없음 — SQL 1회 실행 필요 (임시 경로로는 저장되고 있음)"
+          : "❌ " + e1.message;
+      } else {
+        await client.from("config_journal").delete().eq("id", t.id);
+        report.새저장소_테스트 = "✅ 정상";
+      }
+    } catch (e) { report.새저장소_테스트 = "❌ " + String(e.message || e); }
+
+    // (참고) 옛 저장소(patchnotes) 실전 크기 자가테스트 — 실제 설정과 비슷한 6000자를 넣었다 지워본다
     try {
       const big = "x".repeat(6000);
       const { data: t, error: e1 } = await client

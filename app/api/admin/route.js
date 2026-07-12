@@ -45,6 +45,7 @@ export async function GET(req) {
       configUpdatedAt: cfgRow?.updated_at || null,
       configId: cfgRow?.id || null,
       configV: cfgRow?.v ?? null,
+      configVia: cfgRow?.via || null,
       smsReady: !!(process.env.SOLAPI_API_KEY && process.env.SOLAPI_API_SECRET && process.env.SOLAPI_SENDER),
     });
   } catch (e) {
