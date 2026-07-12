@@ -31,6 +31,8 @@ export default function Admin() {
   const [cfgDirty, setCfgDirty] = useState(false);
   const [cfgSavedAt, setCfgSavedAt] = useState(null);
   const [cfgMsg, setCfgMsg] = useState("");
+  const [live, setLive] = useState(null);   // 사이트가 지금 실제로 보여주는 값 (10초마다 자동 확인)
+  const [liveAt, setLiveAt] = useState(null);
   const frameRef = useRef(null);
   const genRef = useRef(0); // 편집 세대 카운터 — 저장 중 타이핑해도 안전하게
   const cfgRef = useRef(null); // 항상 최신 편집 상태를 담는 참조 (한글 입력 버그 방지용)
@@ -43,6 +45,19 @@ export default function Admin() {
     window.addEventListener("beforeunload", h);
     return () => window.removeEventListener("beforeunload", h);
   }, [cfgDirty]);
+
+  // ★ 사이트가 지금 실제로 보여주는 값을 10초마다 자동 확인 — 저장이 진짜 됐는지 어드민 안에서 즉시 검증
+  const pollLive = () =>
+    fetch("/api/config?t=" + Date.now(), { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => { if (d.config) { setLive(mergeConfig(d.config)); setLiveAt(new Date()); } })
+      .catch(() => {});
+  useEffect(() => {
+    if (!authed) return;
+    pollLive();
+    const t = setInterval(pollLive, 10000);
+    return () => clearInterval(t);
+  }, [authed]);
 
   async function load(k = key) {
     try {
@@ -257,6 +272,7 @@ export default function Admin() {
     cfgRef.current = back;
     setCfg(back);
     setCfgDirty(false);
+    pollLive(); // 저장 직후 사이트 실시간 값 즉시 재확인
     if (!verified) {
       setCfgMsg("⚠️ 저장은 됐지만 기록이 일부 달라 보여요 — 새로고침(F5) 후 값을 확인해주세요.");
       return;
@@ -435,6 +451,16 @@ export default function Admin() {
                   </b>
                 )}
               </div>
+
+              {/* ★ 사이트가 지금 실제로 보여주는 값 — 저장이 진짜 반영됐는지 여기서 즉시 확인 */}
+              {live && (
+                <div className="adm-msg" style={{ padding: "10px 12px", textAlign: "left", background: "var(--card2)", border: "1px solid var(--line)", borderRadius: 10, marginBottom: 12, fontSize: 13 }}>
+                  <b style={{ color: "var(--gold)" }}>📡 사이트 실시간 값</b>
+                  {liveAt && <span style={{ opacity: 0.6 }}> · {liveAt.toLocaleTimeString()} 확인 (10초마다 자동)</span>}
+                  <br />이름 <b>{live.texts.name}</b> · 칭호 <b>{live.texts.titleChip || "(비어있음)"}</b> · HP <b>{live.hp.v}</b> · 개발스텟 <b>{(live.stats.find((s) => s.name === "개발") || {}).v ?? "-"}</b>
+                  <br /><span style={{ opacity: 0.7 }}>저장 &amp; 반영을 누른 뒤 이 줄이 바뀌면 = 디비·사이트 반영 성공. 사이트 화면은 최대 30초 안에 따라옵니다.</span>
+                </div>
+              )}
 
               {/* 실사이트 미리보기 */}
               <div className="ed-frame">
