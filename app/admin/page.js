@@ -360,8 +360,12 @@ export default function Admin() {
       setCfgMsg("⚠️ 저장은 됐지만 기록이 일부 달라 보여요 — 새로고침(F5) 후 값을 확인해주세요.");
       return;
     }
-    setCfgMsg("✓ 저장·검증 완료 — 사이트에 10초 안에 자동 반영됩니다");
-    setTimeout(() => setCfgMsg(""), 6000);
+    if (r.warn) {
+      setCfgMsg("✓ 저장은 성공(사이트 반영됨) · ⚠️ " + r.warn + " — 이 문구를 캡처해서 전달해주세요.");
+    } else {
+      setCfgMsg("✓ 저장·검증 완료 — 사이트에 10초 안에 자동 반영됩니다");
+      setTimeout(() => setCfgMsg(""), 6000);
+    }
   }
 
   const setEdit = (id, patch) => setEdits((p) => ({ ...p, [id]: { ...(p[id] || {}), ...patch } }));

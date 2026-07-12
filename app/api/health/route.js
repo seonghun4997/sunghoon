@@ -31,6 +31,35 @@ export async function GET() {
     report.쓰기테스트 = werr ? "❌ " + werr.message : "✅ 저장 가능";
     if (!werr) await client.from("site_config").delete().eq("id", 999);
 
+    // ★ v37: 설정 저널(patchnotes) 실전 크기 자가테스트 — 실제 설정과 비슷한 6000자를 넣었다 지워본다
+    try {
+      const big = "x".repeat(6000);
+      const { data: t, error: e1 } = await client
+        .from("patchnotes").insert({ version: "__selftest__", content: big }).select("id,content").single();
+      if (e1) {
+        report.설정저널_쓰기테스트 = "❌ 쓰기 실패: " + e1.message;
+      } else {
+        const savedLen = (t.content || "").length;
+        const { data: back, error: e2 } = await client
+          .from("patchnotes").select("id,content").eq("id", t.id).maybeSingle();
+        await client.from("patchnotes").delete().eq("id", t.id);
+        if (e2 || !back) report.설정저널_쓰기테스트 = "⚠️ 썼는데 다시 읽기 실패: " + (e2 ? e2.message : "행이 사라짐");
+        else if (savedLen !== 6000 || (back.content || "").length !== 6000) report.설정저널_쓰기테스트 = "⚠️ 잘림 발생: 저장 " + savedLen + "자 / 재조회 " + (back.content || "").length + "자";
+        else report.설정저널_쓰기테스트 = "✅ 정상 (6000자 쓰기·재조회·삭제 성공)";
+      }
+    } catch (e) { report.설정저널_쓰기테스트 = "❌ " + String(e.message || e); }
+    // 설정 저널에 실제로 쌓인 행 현황
+    try {
+      const { data: js, error: je } = await client
+        .from("patchnotes").select("id,created_at,content").eq("version", "__config__")
+        .order("created_at", { ascending: false }).limit(3);
+      if (je) report.설정저널_현황 = "❌ 조회 오류: " + je.message;
+      else report.설정저널_현황 = (js || []).length === 0 ? "저장된 행 없음" : (js || []).map((r) => {
+        let v = "파싱실패"; try { v = "#" + (JSON.parse(r.content).__v ?? "?"); } catch (e) {}
+        return v + " · " + String(r.created_at).slice(0, 19).replace("T", " ") + " · " + (r.content || "").length + "자";
+      });
+    } catch (e) { report.설정저널_현황 = "❌ " + String(e.message || e); }
+
     // 구독자 현황 — "승인했는데 4촌에 안 보여요" 진단용
     const { data: subs } = await client.from("subscribers").select("chon,approved");
     const list = subs || [];
@@ -49,6 +78,7 @@ export async function GET() {
     const cfgRow = await readLatestConfig(client);
     report.설정_마지막저장 = cfgRow?.updated_at || "아직 저장된 적 없음 (기본값 사용중)";
     report.설정_버전번호 = cfgRow?.v != null ? "#" + cfgRow.v : null;
+    report.설정_저장경로 = cfgRow?.via || null;
 
     // ★ 사이트가 지금 실제로 보여줄 값 — 여기 나오는 그대로 사이트에 표시됩니다
     const merged = mergeConfig(cfgRow?.data);

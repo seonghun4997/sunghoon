@@ -68,10 +68,10 @@ export async function POST(req) {
         return NextResponse.json({ error: "conflict", at: latest.updated_at, v: latest.v });
       }
       const clean = mergeConfig(b.data || {});
-      const { check, error } = await writeNewConfig(client, clean, latest?.v);
+      const { check, error, warn } = await writeNewConfig(client, clean, latest?.v);
       if (error) return NextResponse.json({ error: "db", detail: error.message }, { status: 500 });
       // 방금 추가된 버전 행을 재조회해 그대로 반환 (프론트가 대조 검증)
-      return NextResponse.json({ ok: true, saved: check?.data || null, at: check?.updated_at || null, id: check?.id || null, v: check?.v || null });
+      return NextResponse.json({ ok: true, saved: check?.data || null, at: check?.updated_at || null, id: check?.id || null, v: check?.v || null, warn: warn || null });
     }
 
     // 패치노트 등록
