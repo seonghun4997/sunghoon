@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { DEFAULT_CONFIG, mergeConfig, lines } from "@/lib/config";
+import { DEFAULT_CONFIG, mergeConfig, lines, BUILD } from "@/lib/config";
 
 const RANK = (v) => (v >= 9 ? "S" : v >= 7 ? "A" : v >= 5 ? "B" : v >= 3 ? "C" : "D");
 
@@ -69,11 +69,11 @@ export default function Home() {
         ping();
       }
     } catch (e) { ping(); }
-    fetch("/api/public", { cache: "no-store" })
+    fetch("/api/public?t=" + Date.now(), { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => { setMembers(d.members || []); setTotal(d.total ?? 0); setNotes(d.notes || []); })
       .catch(() => {});
-    fetch("/api/config", { cache: "no-store" })
+    fetch("/api/config?t=" + Date.now(), { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => { if (d.config) setCfg(mergeConfig(d.config)); })
       .catch(() => {});
@@ -386,7 +386,7 @@ export default function Home() {
       <div className="wrap">
         <div className="eyebrow">— PLAYER STATUS —</div>
         {visible.map((k) => sections[k] || null)}
-        <div className="footer">PRESS START TO NETWORK<br />SEOUL SEONGBUK · NO GAME OVER</div>
+        <div className="footer">PRESS START TO NETWORK<br />SEOUL SEONGBUK · NO GAME OVER<br /><span style={{ opacity: 0.45, fontSize: "0.85em" }}>BUILD {BUILD}</span></div>
       </div>
 
       {/* 하단 구독바 */}

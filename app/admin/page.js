@@ -1,6 +1,19 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { SECTION_LABELS, mergeConfig } from "@/lib/config";
+import { SECTION_LABELS, mergeConfig, BUILD } from "@/lib/config";
+
+// 오류 시 진단 페이지로 바로 가는 링크 — 캡처해서 보내면 원인 파악 가능
+function DiagLink() {
+  return (
+    <>
+      {" · "}
+      <a href="/api/health" target="_blank" rel="noreferrer" style={{ color: "var(--mp)", fontWeight: 800, textDecoration: "underline" }}>
+        🔍 진단 페이지 열기
+      </a>
+      {" — 열린 화면을 캡처해서 보내주세요"}
+    </>
+  );
+}
 
 export default function Admin() {
   const [key, setKey] = useState("");
@@ -8,6 +21,7 @@ export default function Admin() {
   const [err, setErr] = useState(false);
   const [data, setData] = useState(null);
   const [savedId, setSavedId] = useState(null);
+  const [subMsg, setSubMsg] = useState(""); // 구독자 저장 결과 메시지
   const [edits, setEdits] = useState({});
   const [noteVer, setNoteVer] = useState("");
   const [noteContent, setNoteContent] = useState("");
@@ -60,18 +74,19 @@ export default function Admin() {
   }
 
   async function save(s) {
+    setSubMsg("");
     try {
       const e = edits[s.id] || {};
       const chon = e.chon ?? s.chon;
       const approved = e.approved ?? (s.approved ? "Y" : "N");
       const res = await post({ id: s.id, chon: parseInt(chon, 10), approved: approved === "Y" || approved === true });
-      if (!res?.ok) { alert("저장 실패 — 잠시 후 다시 시도해주세요."); return; }
+      if (!res?.ok) { setSubMsg("err:저장 실패 — 서버가 저장을 거부했습니다."); return; }
       setSavedId(s.id);
       setTimeout(() => setSavedId(null), 1500);
-      if (res.smsSent) alert("승인 완료 — 환영 문자가 발송됐습니다.");
+      setSubMsg("ok:" + s.name + "님 저장 완료" + (res.smsSent ? " · 환영 문자 발송됨" : ""));
       load();
     } catch (e) {
-      alert("네트워크 오류 — 인터넷 연결을 확인하고 다시 시도해주세요.");
+      setSubMsg("err:네트워크 오류 — 인터넷 연결을 확인하고 다시 시도해주세요.");
     }
   }
 
@@ -260,7 +275,7 @@ export default function Admin() {
 
   return (
     <div className="wrap" style={{ paddingBottom: 80 }}>
-      <div className="eyebrow" style={{ color: "var(--gold)" }}>— ADMIN CONSOLE —</div>
+      <div className="eyebrow" style={{ color: "var(--gold)" }}>— ADMIN CONSOLE · BUILD {BUILD} —</div>
 
       {!authed ? (
         <div className="card">
@@ -271,7 +286,7 @@ export default function Admin() {
               onKeyDown={(e) => e.key === "Enter" && unlock()} />
             <button onClick={unlock}>입장</button>
           </div>
-          {err && <div className="adm-msg err">키가 올바르지 않거나 서버 연결에 실패했습니다.</div>}
+          {err && <div className="adm-msg err">키가 올바르지 않거나 서버 연결에 실패했습니다.<DiagLink /></div>}
         </div>
       ) : (
         <>
@@ -321,7 +336,18 @@ export default function Admin() {
             </div>
             <div className="adm-msg" style={{ padding: "0 0 12px", textAlign: "left" }}>
               대기 → 승인으로 바꾸고 저장하면 환영 문자가 자동 발송됩니다{data.smsReady ? "" : " (Solapi 설정 후 활성화)"}.
+              {" "}승인 후 사이트 4촌에 보이는지는{" "}
+              <a href="/api/public" target="_blank" rel="noreferrer" style={{ color: "var(--mp)", fontWeight: 700, textDecoration: "underline" }}>여기(공개 데이터)</a>
+              에서 바로 확인할 수 있어요.
             </div>
+            {subMsg && (
+              <div className="adm-msg" style={{ padding: "0 0 12px", textAlign: "left" }}>
+                <b style={{ color: subMsg.startsWith("ok:") ? "var(--hp)" : "var(--red)" }}>
+                  {subMsg.startsWith("ok:") ? "✓ " : "❌ "}{subMsg.slice(subMsg.indexOf(":") + 1)}
+                </b>
+                {subMsg.startsWith("err:") && <DiagLink />}
+              </div>
+            )}
             {data.subscribers.length === 0 ? (
               <div className="adm-msg">아직 구독자가 없습니다.</div>
             ) : (
@@ -395,7 +421,12 @@ export default function Admin() {
                 수정 후 <b>저장 &amp; 반영</b>을 누르세요. 저장은 디비에 기록된 걸 다시 읽어 검증까지 마친 뒤에만 성공으로 표시됩니다.
                 {cfgSavedAt && <> · 마지막 저장 {String(cfgSavedAt).slice(0, 16).replace("T", " ")}</>}
                 {cfgDirty && <b style={{ color: "var(--gold)" }}> · 저장 안 된 수정사항 있음</b>}
-                <br />{cfgMsg && <b style={{ color: cfgMsg.startsWith("✓") ? "var(--hp)" : "var(--red)" }}>{cfgMsg}</b>}
+                <br />{cfgMsg && (
+                  <b style={{ color: cfgMsg.startsWith("✓") ? "var(--hp)" : "var(--red)" }}>
+                    {cfgMsg}
+                    {(cfgMsg.startsWith("❌") || cfgMsg.startsWith("⚠️")) && <DiagLink />}
+                  </b>
+                )}
               </div>
 
               {/* 실사이트 미리보기 */}
