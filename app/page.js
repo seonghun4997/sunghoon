@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { DEFAULT_CONFIG, mergeConfig, lines } from "@/lib/config";
 
 const RANK = (v) => (v >= 9 ? "S" : v >= 7 ? "A" : v >= 5 ? "B" : v >= 3 ? "C" : "D");
@@ -41,16 +41,17 @@ export default function Home() {
 
   const T = cfg.texts;
 
-  const stars = useMemo(
-    () =>
+  const [stars, setStars] = useState([]);
+  useEffect(() => {
+    setStars(
       Array.from({ length: 42 }, () => ({
         left: Math.random() * 100 + "%",
         top: Math.random() * 100 + "%",
         delay: Math.random() * 3 + "s",
         gold: Math.random() < 0.25,
-      })),
-    []
-  );
+      }))
+    );
+  }, []);
 
   // 대화창 타자기 (문구가 바뀌면 다시 타이핑)
   useEffect(() => {
@@ -78,11 +79,11 @@ export default function Home() {
         ping();
       }
     } catch (e) { ping(); }
-    fetch("/api/public")
+    fetch("/api/public", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => { setMembers(d.members || []); setTotal(d.total ?? 0); setNotes(d.notes || []); })
       .catch(() => {});
-    fetch("/api/config")
+    fetch("/api/config", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => { if (d.config) setCfg(mergeConfig(d.config)); })
       .catch(() => {});
