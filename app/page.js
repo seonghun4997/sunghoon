@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { DEFAULT_CONFIG, mergeConfig, lines, BUILD } from "@/lib/config";
+import { DEFAULT_CONFIG, mergeConfig, lines, BUILD, CANONICAL_HOST } from "@/lib/config";
 
 const RANK = (v) => (v >= 9 ? "S" : v >= 7 ? "A" : v >= 5 ? "B" : v >= 3 ? "C" : "D");
 
@@ -19,6 +19,7 @@ export default function Home() {
   const [dlg, setDlg] = useState("");
   const [members, setMembers] = useState([]);
   const [total, setTotal] = useState(null);
+  const [diag, setDiag] = useState({ db: "", v: null }); // 푸터 자가진단용 (디비·설정버전)
   const [open4, setOpen4] = useState(false);
   const [notes, setNotes] = useState([]);
   const [phase, setPhase] = useState("idle");
@@ -56,6 +57,16 @@ export default function Home() {
   }, [T.dialog]);
 
   useEffect(() => {
+    // ★★ v36: 공식 주소 강제 — 중복 배포(다른 Vercel 프로젝트) 주소로 들어오면
+    //    방문자든 관리자든 무조건 공식 사이트로 이동시킨다. (QR/공유 파라미터는 유지)
+    try {
+      const h = location.host;
+      if (h !== CANONICAL_HOST && !h.startsWith("localhost") && !h.startsWith("127.0.0.1")) {
+        location.replace("https://" + CANONICAL_HOST + location.pathname + location.search);
+        return;
+      }
+    } catch (e) {}
+
     // ★ 킬스위치: 과거 사이트가 브라우저에 남긴 서비스워커·캐시를 전부 제거
     //   (서버를 아무리 고쳐도 브라우저가 옛날 응답을 돌려주던 원인 차단)
     try {
@@ -89,6 +100,7 @@ export default function Home() {
         .then((d) => {
           setMembers(d.members || []);
           setTotal(d.total ?? 0);
+          setDiag({ db: String(d.dbHost || "").slice(0, 8), v: d.configV ?? null });
           setNotes(d.notes || []);
           if (d.config) setCfg(mergeConfig(d.config));
         })
@@ -293,7 +305,7 @@ export default function Home() {
               <div className="chon" key={chon}>
                 <div className="chonhead"><span className="n t4">4촌</span><span className="r">{rule}</span></div>
                 <button className="fold" onClick={() => setOpen4(!open4)}>
-                  🙋 구독자 {total === null ? "-" : total}명 <span style={{ color: "var(--dim)", fontWeight: 400 }}>· {open4 ? "접기 ▲" : "눌러서 보기 ▼"}</span>
+                  🙋 구독자 {all.length}명 <span style={{ color: "var(--dim)", fontWeight: 400 }}>· {open4 ? "접기 ▲" : "눌러서 보기 ▼"}</span>
                 </button>
                 {open4 && (
                   all.length === 0 ? (
@@ -338,8 +350,8 @@ export default function Home() {
         <div className="sechead"><h2>구독</h2><span className="en" style={{ color: "var(--mp)" }}>SUBSCRIBE</span></div>
         <div className="desc">
           {T.subDesc}
-          {total !== null && total > 0 && (
-            <><br />현재 <b style={{ color: "var(--mp)" }}>{total}명</b>이 구독중입니다.</>
+          {members.length > 0 && (
+            <><br />현재 <b style={{ color: "var(--mp)" }}>{members.length}명</b>이 구독중입니다.</>
           )}
         </div>
         <div style={{ textAlign: "center" }}>
@@ -412,7 +424,7 @@ export default function Home() {
       <div className="wrap">
         <div className="eyebrow">— PLAYER STATUS —</div>
         {visible.map((k) => sections[k] || null)}
-        <div className="footer">PRESS START TO NETWORK<br />SEOUL SEONGBUK · NO GAME OVER<br /><span style={{ opacity: 0.45, fontSize: "0.85em" }}>BUILD {BUILD}</span></div>
+        <div className="footer">PRESS START TO NETWORK<br />SEOUL SEONGBUK · NO GAME OVER<br /><span style={{ opacity: 0.45, fontSize: "0.85em" }}>BUILD {BUILD} · DB {diag.db || "?"} · 설정 {diag.v != null ? "#" + diag.v : "#100"}</span></div>
       </div>
 
       {/* 하단 구독바 */}

@@ -44,6 +44,7 @@ export async function GET(req) {
       config: mergeConfig(cfgRow?.data),
       configUpdatedAt: cfgRow?.updated_at || null,
       configId: cfgRow?.id || null,
+      configV: cfgRow?.v ?? null,
       smsReady: !!(process.env.SOLAPI_API_KEY && process.env.SOLAPI_API_SECRET && process.env.SOLAPI_SENDER),
     });
   } catch (e) {
@@ -62,14 +63,15 @@ export async function POST(req) {
       // ★ v33 저널 저장: 덮어쓰기 대신 새 버전 행 추가 — 과거 데이터가 최신 저장을 이길 수 없음
       // 충돌 방지: 이 탭이 본 버전 번호(baseId)와 현재 최신 번호가 다르면 차단
       const latest = await readLatestConfig(client);
-      if (!b.force && b.baseId && latest?.id && String(latest.id) !== String(b.baseId)) {
-        return NextResponse.json({ error: "conflict", at: latest.updated_at, id: latest.id });
+      // ★ v36: 충돌 판정은 사람이 읽는 버전 번호(#101, #102…)로 통일
+      if (!b.force && b.baseV != null && latest?.v != null && Number(latest.v) !== Number(b.baseV)) {
+        return NextResponse.json({ error: "conflict", at: latest.updated_at, v: latest.v });
       }
       const clean = mergeConfig(b.data || {});
-      const { check, error } = await writeNewConfig(client, clean);
+      const { check, error } = await writeNewConfig(client, clean, latest?.v);
       if (error) return NextResponse.json({ error: "db", detail: error.message }, { status: 500 });
       // 방금 추가된 버전 행을 재조회해 그대로 반환 (프론트가 대조 검증)
-      return NextResponse.json({ ok: true, saved: check?.data || null, at: check?.updated_at || null, id: check?.id || null });
+      return NextResponse.json({ ok: true, saved: check?.data || null, at: check?.updated_at || null, id: check?.id || null, v: check?.v || null });
     }
 
     // 패치노트 등록

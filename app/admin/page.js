@@ -76,7 +76,7 @@ export default function Admin() {
       .then((r) => r.json())
       .then((d) => {
         if (d.config) {
-          setLive({ cfg: mergeConfig(d.config), dbHost: d.dbHost || "?", build: d.build || "?", updatedAt: d.configUpdatedAt || null, cfgId: d.configId || null });
+          setLive({ cfg: mergeConfig(d.config), dbHost: d.dbHost || "?", build: d.build || "?", updatedAt: d.configUpdatedAt || null, cfgV: d.configV ?? null });
           setLiveAt(new Date());
         }
       })
@@ -114,7 +114,7 @@ export default function Admin() {
       if (d.config && !dirtyRef.current) {
         cfgRef.current = mergeConfig(d.config);
         setCfg(cfgRef.current);
-        baseAtRef.current = d.configId || null; // 이 버전 번호 기준으로 편집 시작
+        baseAtRef.current = d.configV ?? null; // 이 버전 번호(#숫자) 기준으로 편집 시작
       }
       if (d.configUpdatedAt) setCfgSavedAt(d.configUpdatedAt);
       return true;
@@ -321,7 +321,7 @@ export default function Admin() {
     // 네트워크 오류 시 1회 자동 재시도
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        r = await post({ action: "saveconfig", data: sentCfg, baseId: baseAtRef.current, force });
+        r = await post({ action: "saveconfig", data: sentCfg, baseV: baseAtRef.current, force });
         break;
       } catch (e) {
         if (attempt === 2) {
@@ -340,7 +340,7 @@ export default function Admin() {
     if (r?.error === "db") { setCfgMsg("❌ 저장 실패 — " + (r.detail || "디비 오류") + " · 잠시 후 다시 저장을 눌러주세요."); return; }
     if (!r?.ok || !r?.saved) { setCfgMsg("❌ 저장 실패 — 잠시 후 다시 저장을 눌러주세요. 수정한 내용은 남아있습니다."); return; }
 
-    baseAtRef.current = r.id || null; // 이제 이 버전 번호가 새 기준
+    baseAtRef.current = r.v ?? null; // 이제 이 버전 번호가 새 기준
     const back = mergeConfig(r.saved);
     const verified = JSON.stringify(canon(back)) === JSON.stringify(canon(mergeConfig(sentCfg)));
     setCfgSavedAt(r.at || null);
@@ -575,7 +575,7 @@ export default function Admin() {
                   <b style={{ color: "var(--gold)" }}>🔌 이 탭의 연결 상태</b>
                   <br />어드민 주소 <b>{typeof location !== "undefined" ? location.host : "?"}</b> · 서버 빌드 <b>{live.build}</b>
                   <br />연결된 디비 <b style={{ color: "var(--mp)" }}>{live.dbHost}</b>
-                  <br />설정 버전 <b style={{ color: "var(--gold)" }}>{live.cfgId ? String(live.cfgId).slice(0, 8) : "-"}</b> · 디비 마지막 저장 <b>{live.updatedAt ? String(live.updatedAt).slice(0, 19).replace("T", " ") : "-"}</b> <span style={{ opacity: 0.7 }}>← 저장할 때마다 코드가 바뀌어야 정상</span>
+                  <br />설정 버전 <b style={{ color: "var(--gold)" }}>{live.cfgV != null ? "#" + live.cfgV : "#100(첫 저장 전)"}</b> · 디비 마지막 저장 <b>{live.updatedAt ? String(live.updatedAt).slice(0, 19).replace("T", " ") : "-"}</b> <span style={{ opacity: 0.7 }}>← 저장할 때마다 번호가 +1 되어야 정상</span>
                   <div style={{ borderTop: "1px dashed var(--line)", margin: "8px 0" }} />
                   <b style={{ color: "var(--gold)" }}>📡 사이트 실시간 값</b>
                   {liveAt && <span style={{ opacity: 0.6 }}> · {liveAt.toLocaleTimeString()} 확인 (10초마다 자동)</span>}

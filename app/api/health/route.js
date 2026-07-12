@@ -48,7 +48,7 @@ export async function GET() {
     // 사이트 편집기 마지막 저장 시각
     const cfgRow = await readLatestConfig(client);
     report.설정_마지막저장 = cfgRow?.updated_at || "아직 저장된 적 없음 (기본값 사용중)";
-    report.설정_버전번호 = cfgRow?.id || null;
+    report.설정_버전번호 = cfgRow?.v != null ? "#" + cfgRow.v : null;
 
     // ★ 사이트가 지금 실제로 보여줄 값 — 여기 나오는 그대로 사이트에 표시됩니다
     const merged = mergeConfig(cfgRow?.data);
