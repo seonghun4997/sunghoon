@@ -81,16 +81,17 @@ export default function Home() {
       }
     } catch (e) { ping(); }
 
-    // ★ 최신 데이터 불러오기 — 처음 1회 + 탭으로 돌아올 때 + 30초마다 자동 갱신
-    //   (어드민에서 저장하면 열려있는 사이트에도 새로고침 없이 반영됨)
+    // ★ 최신 데이터 불러오기 — 새 통로(/api/data2)만 사용 (과거 캐시 오염 원천 차단)
+    //   처음 1회 + 탭으로 돌아올 때 + 30초마다 자동 갱신
     const loadData = () => {
-      fetch("/api/public?t=" + Date.now(), { cache: "no-store" })
+      fetch("/api/data2?t=" + Date.now(), { cache: "no-store" })
         .then((r) => r.json())
-        .then((d) => { setMembers(d.members || []); setTotal(d.total ?? 0); setNotes(d.notes || []); })
-        .catch(() => {});
-      fetch("/api/config?t=" + Date.now(), { cache: "no-store" })
-        .then((r) => r.json())
-        .then((d) => { if (d.config) setCfg(mergeConfig(d.config)); })
+        .then((d) => {
+          setMembers(d.members || []);
+          setTotal(d.total ?? 0);
+          setNotes(d.notes || []);
+          if (d.config) setCfg(mergeConfig(d.config));
+        })
         .catch(() => {});
     };
     loadData();
