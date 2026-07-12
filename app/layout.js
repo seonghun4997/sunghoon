@@ -1,5 +1,12 @@
 import "./globals.css";
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0b0d1f",
+};
+
 export const metadata = {
   metadataBase: new URL("https://sunghoon-nine.vercel.app"),
   title: "전성훈 — 은둔형 연쇄창업가",

@@ -872,7 +872,9 @@ export default function Admin() {
                   ["lockNet3Desc", "소개 신청 3촌 안내 내용"],
                   ["introReqTitle", "소개 신청 팝업 제목"],
                   ["introReqDesc", "소개 신청 팝업 설명"],
-                  ["introPhone", "소개 신청 수신 번호"],
+                  ["introPhone", "소개·커피챗 수신 번호"],
+                  ["coffeeBtn", "커피챗 버튼 문구"],
+                  ["coffeeSms", "커피챗 문자 기본 양식 (줄바꿈 가능)"],
                   ["lockBizTitle", "사업 잠금 팝업 제목"],
                   ["lockBizDesc", "사업 잠금 팝업 내용"],
                   ["lockNetTitle", "소개받기 팝업 제목"],
@@ -885,7 +887,7 @@ export default function Admin() {
                   </div>
                 ))}
                 <div className="fgroup">
-                  <div className="flabel">미팅 안내 (줄바꿈 가능)</div>
+                  <div className="flabel">커피챗 안내 (줄바꿈 가능)</div>
                   <textarea rows={2} value={cfg.texts.ctaMeeting} style={{ resize: "vertical" }}
                     onChange={(e) => setText("ctaMeeting", e.target.value)} />
                 </div>

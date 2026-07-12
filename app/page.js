@@ -419,7 +419,7 @@ export default function Home() {
 
     catch: (
       <section className="card" key="catch">
-        <div className="sechead"><h2>포획</h2><span className="en">CATCH & MEET</span></div>
+        <div className="sechead"><h2>포획</h2><span className="en">CATCH & COFFEE</span></div>
         <div className="catch-scene">
           {phase !== "caught" ? (
             <>
@@ -459,6 +459,7 @@ export default function Home() {
             <ML t={T.ctaMeeting} /><br />
             {T.ctaLocation}
           </div>
+          <a className="coffee" href={"sms:" + String(T.introPhone || "").replace(/\D/g, "") + "?&body=" + encodeURIComponent(T.coffeeSms || "")}>{T.coffeeBtn}</a>
           <div className="battle">
             <button onClick={shareLink}><b>▶</b>공유하기</button>
             <button onClick={openSub}><b>▶</b>구독하기</button>
