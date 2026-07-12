@@ -297,6 +297,7 @@ export default function Admin() {
   const infoOps = cfg ? listOps("info") : null;
   const statOps = cfg ? listOps("stats") : null;
   const bizOps = cfg ? listOps("biz") : null;
+  const postOps = cfg ? listOps("posts") : null;
 
   /* ── 인맥(1~4촌) 편집 헬퍼 ── */
   const setNetRule = (gi, v) => {
@@ -797,6 +798,42 @@ export default function Admin() {
                   </div>
                 ))}
                 <button className="sm" onClick={() => bizOps.add({ icon: "🆕", name: "새 사업", tag: "카테고리 · 1개", stage: "초기", desc: "" })}>+ 사업 추가</button>
+              </details>
+
+              {/* ✍️ 글 — 자유 게시 */}
+              <details>
+                <summary>✍️ 글 — 자유롭게 쓰는 공간</summary>
+                <div className="fgroup">
+                  <div className="flabel">섹션 제목</div>
+                  <input value={cfg.texts.postsTitle} onChange={(e) => setText("postsTitle", e.target.value)} />
+                </div>
+                <div className="fgroup">
+                  <div className="flabel">섹션 설명 (비우면 숨김)</div>
+                  <input value={cfg.texts.postsDesc} onChange={(e) => setText("postsDesc", e.target.value)} />
+                </div>
+                {(cfg.posts || []).map((po, i) => (
+                  <div className="ed-biz" key={i}>
+                    <div className="ed-row">
+                      <input style={{ flex: 1, minWidth: 0 }} value={po.title} placeholder="제목" onChange={(e) => postOps.set(i, "title", e.target.value)} />
+                      <input style={{ width: 110, flexShrink: 0 }} value={po.date} placeholder="2026.07.13" onChange={(e) => postOps.set(i, "date", e.target.value)} />
+                    </div>
+                    <div className="ed-row">
+                      <textarea rows={5} style={{ flex: 1, minWidth: 0, resize: "vertical" }} value={po.body} placeholder="내용 — 줄바꿈 그대로 표시됩니다" onChange={(e) => postOps.set(i, "body", e.target.value)} />
+                    </div>
+                    <div className="ed-row" style={{ justifyContent: "flex-end" }}>
+                      <button className="sm ghost" onClick={() => postOps.move(i, -1)}>▲</button>
+                      <button className="sm ghost" onClick={() => postOps.move(i, 1)}>▼</button>
+                      <button className="sm ghost" onClick={() => postOps.del(i)}>✕</button>
+                    </div>
+                  </div>
+                ))}
+                <button className="sm" onClick={() => {
+                  const k = new Date(Date.now() + 9 * 3600 * 1000).toISOString();
+                  postOps.add({ title: "", date: k.slice(0, 10).replace(/-/g, "."), body: "" });
+                }}>+ 글 추가</button>
+                <div className="adm-msg" style={{ padding: "8px 0 0", textAlign: "left", opacity: 0.75 }}>
+                  글은 모든 방문자에게 공개됩니다. 저장하면 사이트 "글" 칸에 제목만 보이고, 누르면 펼쳐져요. 글이 하나도 없으면 칸 자체가 숨겨집니다.
+                </div>
               </details>
 
               {/* 인맥 (1~4촌) */}

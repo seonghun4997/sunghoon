@@ -181,9 +181,6 @@ export default function Home() {
       if (d.error === "dup") { toast("이미 구독된 번호입니다"); setSending(false); return; }
       if (!d.ok) { toast("전송 실패 — 다시 시도해주세요"); setSending(false); return; }
       setSubDone(true);
-      // ★ v44: 자동 승인 — 구독 즉시 4촌 등급으로 잠금해제
-      setViewer({ chon: d.chon || 4, name: form.name });
-      try { localStorage.setItem("viewer_phone", form.phone); } catch (e) {}
     } catch (e) {
       toast("전송 실패 — 다시 시도해주세요");
     }
@@ -350,6 +347,22 @@ export default function Home() {
               <div className="pn-d">{String(n.created_at).slice(0, 10)}</div>
             </div>
           </div>
+        ))}
+      </section>
+    ),
+
+    posts: (cfg.posts || []).length > 0 && (
+      <section className="card" key="posts">
+        <div className="sechead"><h2>{T.postsTitle}</h2><span className="en">LOG</span></div>
+        {T.postsDesc?.trim() && <div className="desc">{T.postsDesc}</div>}
+        {cfg.posts.map((p, i) => (
+          <details className="post" key={i}>
+            <summary>
+              <span className="post-t">{p.title || "제목 없음"}</span>
+              {p.date?.trim() && <span className="post-d">{p.date}</span>}
+            </summary>
+            <div className="post-b">{lines(p.body).map((l, j) => (l === "" ? <br key={j} /> : <div key={j}>{l}</div>))}</div>
+          </details>
         ))}
       </section>
     ),
@@ -578,9 +591,9 @@ export default function Home() {
             {subDone ? (
               <div className="centerpad">
                 <div style={{ fontSize: 32 }}>📡</div>
-                <div style={{ fontWeight: 800, fontSize: 17, marginTop: 10, color: "var(--mp)" }}>4촌 등록 완료!</div>
+                <div style={{ fontWeight: 800, fontSize: 17, marginTop: 10, color: "var(--mp)" }}>신청 완료!</div>
                 <div style={{ fontSize: 13.5, color: "var(--dim)", marginTop: 6 }}>
-                  이 화면이 바로 4촌 등급으로 열렸습니다 🔓<br />사업·인맥 업데이트가 문자로 갑니다.
+                  4촌 등록이 끝나면 문자로 알려드릴게요.<br />그때부터 잠긴 칸도 번호로 열 수 있습니다.
                 </div>
                 <div style={{ marginTop: 18 }}><button onClick={() => setSubOpen(false)}>닫기</button></div>
               </div>
@@ -590,7 +603,7 @@ export default function Home() {
                   <h2 style={{ fontSize: 17 }}>구독 = 4촌 등록</h2>
                   <span className="en" style={{ color: "var(--mp)" }}>SUBSCRIBE</span>
                 </div>
-                <div className="desc">신청하면 <b style={{ color: "var(--mp)" }}>바로 4촌으로 등록</b>됩니다. 이름·연락처는 비공개 — 아이콘·직업·자랑 한 줄만 공개돼요.</div>
+                <div className="desc">신청 후 <b style={{ color: "var(--mp)" }}>4촌으로 등록</b>됩니다. 이름·연락처는 비공개 — 아이콘·직업·자랑 한 줄만 공개돼요.</div>
                 <div className="fgroup">
                   <div className="flabel">프로필 아이콘 (공개)</div>
                   <div className="iconpick">

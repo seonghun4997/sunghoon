@@ -160,7 +160,7 @@ export async function POST(req) {
       const dg = String(before.phone || "").replace(/\D/g, "");
       sms = await sendSMS(
         dg,
-        `[전성훈 상태창] ${before.name}님, 4촌 등록이 승인됐습니다! 앞으로 사업·인맥 소식을 보내드릴게요.\n${SITE}\n구독취소: ${SITE}/bye?p=${dg}&t=${unsubToken(dg)}`
+        `[전성훈 상태창] ${before.name}님, 4촌 등록이 완료됐습니다! 앞으로 사업·인맥 소식을 보내드릴게요.\n${SITE}\n구독취소: ${SITE}/bye?p=${dg}&t=${unsubToken(dg)}`
       );
     }
     return NextResponse.json({ ok: true, smsSent: sms ? !sms.skipped : false, row: after ? { id: after.id, chon: parseInt(after.chon, 10) || 4, approved: isApproved(after.approved), name: after.name || "", job: after.job || "", intro: after.intro || "" } : null });
