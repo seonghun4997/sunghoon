@@ -1,4 +1,4 @@
-import { sb, kstDayStart, isApproved } from "@/lib/supabase";
+import { sb, kstDayStart, isApproved, readLatestConfig, writeNewConfig } from "@/lib/supabase";
 import { mergeConfig } from "@/lib/config";
 import { sendSMS } from "@/lib/solapi";
 import { NextResponse } from "next/server";
@@ -24,7 +24,7 @@ export async function GET(req) {
       client.from("visits").select("*", { count: "exact", head: true }).eq("src", "share"),
       client.from("subscribers").select("*").order("created_at", { ascending: false }),
       client.from("patchnotes").select("*").order("created_at", { ascending: false }),
-      client.from("site_config").select("data,updated_at").eq("id", 1).maybeSingle(),
+      readLatestConfig(client),
     ]);
     const list = (subs.data || []).map((s) => ({ ...s, approved: isApproved(s.approved) }));
     const total = vt.count || 0;
@@ -41,8 +41,9 @@ export async function GET(req) {
       pending: list.filter((s) => !s.approved).length,
       subscribers: list,
       notes: notes.data || [],
-      config: mergeConfig(cfgRow?.data?.data),
-      configUpdatedAt: cfgRow?.data?.updated_at || null,
+      config: mergeConfig(cfgRow?.data),
+      configUpdatedAt: cfgRow?.updated_at || null,
+      configId: cfgRow?.id || null,
       smsReady: !!(process.env.SOLAPI_API_KEY && process.env.SOLAPI_API_SECRET && process.env.SOLAPI_SENDER),
     });
   } catch (e) {
@@ -58,24 +59,17 @@ export async function POST(req) {
 
     // 사이트 설정 저장
     if (b.action === "saveconfig") {
-      // ★ 충돌 방지 잠금: 다른 탭/기기에서 먼저 저장했다면(낡은 탭의 저장 시도) 덮어쓰기를 차단
-      const { data: cur } = await client.from("site_config").select("updated_at").eq("id", 1).maybeSingle();
-      if (!b.force && b.baseAt && cur?.updated_at && String(cur.updated_at) !== String(b.baseAt)) {
-        return NextResponse.json({ error: "conflict", at: cur.updated_at });
+      // ★ v33 저널 저장: 덮어쓰기 대신 새 버전 행 추가 — 과거 데이터가 최신 저장을 이길 수 없음
+      // 충돌 방지: 이 탭이 본 버전 번호(baseId)와 현재 최신 번호가 다르면 차단
+      const latest = await readLatestConfig(client);
+      if (!b.force && b.baseId && latest?.id && Number(latest.id) !== Number(b.baseId)) {
+        return NextResponse.json({ error: "conflict", at: latest.updated_at, id: latest.id });
       }
-      // 저장 전에 형태를 정리(병합)해서 항상 완전한 설정만 디비에 기록 → 검증 오탐·깨진 데이터 방지
       const clean = mergeConfig(b.data || {});
-      const { error } = await client
-        .from("site_config")
-        .upsert({ id: 1, data: clean, updated_at: new Date().toISOString() });
+      const { check, error } = await writeNewConfig(client, clean);
       if (error) return NextResponse.json({ error: "db", detail: error.message }, { status: 500 });
-      // 저장 직후 디비에서 다시 읽어와서 그대로 반환 (프론트가 대조 검증)
-      const { data: check } = await client
-        .from("site_config")
-        .select("data,updated_at")
-        .eq("id", 1)
-        .single();
-      return NextResponse.json({ ok: true, saved: check?.data || null, at: check?.updated_at || null });
+      // 방금 추가된 버전 행을 재조회해 그대로 반환 (프론트가 대조 검증)
+      return NextResponse.json({ ok: true, saved: check?.data || null, at: check?.updated_at || null, id: check?.id || null });
     }
 
     // 패치노트 등록

@@ -1,4 +1,4 @@
-import { sb, supabaseHost, isApproved } from "@/lib/supabase";
+import { sb, supabaseHost, isApproved, readLatestConfig } from "@/lib/supabase";
 import { BUILD, mergeConfig } from "@/lib/config";
 import { NextResponse } from "next/server";
 
@@ -46,8 +46,9 @@ export async function GET() {
     };
 
     // 사이트 편집기 마지막 저장 시각
-    const { data: cfgRow } = await client.from("site_config").select("data,updated_at").eq("id", 1).maybeSingle();
+    const cfgRow = await readLatestConfig(client);
     report.설정_마지막저장 = cfgRow?.updated_at || "아직 저장된 적 없음 (기본값 사용중)";
+    report.설정_버전번호 = cfgRow?.id || null;
 
     // ★ 사이트가 지금 실제로 보여줄 값 — 여기 나오는 그대로 사이트에 표시됩니다
     const merged = mergeConfig(cfgRow?.data);

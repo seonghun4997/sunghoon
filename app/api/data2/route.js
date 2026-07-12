@@ -1,4 +1,4 @@
-import { sb, supabaseHost, isApproved } from "@/lib/supabase";
+import { sb, supabaseHost, isApproved, readLatestConfig } from "@/lib/supabase";
 import { mergeConfig, BUILD } from "@/lib/config";
 import { NextResponse } from "next/server";
 
@@ -17,7 +17,7 @@ export async function GET() {
   try {
     const client = sb();
     const [{ data: cfgRow }, { data: rows }, { data: notes }] = await Promise.all([
-      client.from("site_config").select("data,updated_at").eq("id", 1).maybeSingle(),
+      readLatestConfig(client),
       client.from("subscribers").select("*"),
       client.from("patchnotes").select("id,created_at,version,content").order("created_at", { ascending: false }).limit(10),
     ]);
@@ -32,6 +32,7 @@ export async function GET() {
         dbHost: supabaseHost(),
         config: mergeConfig(cfgRow?.data),
         configUpdatedAt: cfgRow?.updated_at || null,
+        configId: cfgRow?.id || null,
         members,
         total: all.length,
         notes: notes || [],
