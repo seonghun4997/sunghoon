@@ -166,6 +166,7 @@ export default function Admin() {
         name: e.name ?? s.name ?? "",
         job: e.job ?? s.job ?? "",
         intro: e.intro ?? s.intro ?? "",
+        icon: e.icon ?? s.icon ?? "🙋",
       });
       if (!res?.ok) { setSubMsg("err:저장 실패 — 서버가 저장을 거부했습니다."); return; }
       // ★ v39: 디비에 실제로 기록된 값을 돌려받아 대조 — 화면과 디비가 다르면 즉시 들통
@@ -204,6 +205,9 @@ export default function Admin() {
     load();
   }
 
+  const [subQ, setSubQ] = useState("");          // 구독자 검색어
+  const [subFilter, setSubFilter] = useState("all"); // all | 1~4 | pending
+  const [bcChons, setBcChons] = useState([1, 2, 3, 4]); // 단체문자 대상 촌
   const [testTo, setTestTo] = useState("");
   const [testMsg, setTestMsg] = useState("");
   const [testBusy, setTestBusy] = useState(false);
@@ -218,13 +222,22 @@ export default function Admin() {
     setTestBusy(false);
   }
 
+  async function delSub(s) {
+    if (!confirm(s.name + "님을 삭제할까요?\n사이트 인맥 목록에서도 즉시 사라지며 되돌릴 수 없습니다.")) return;
+    const r = await post({ action: "delsub", id: s.id });
+    if (r.ok) { setSubMsg("ok:" + s.name + "님 삭제됨"); load(key, true); }
+    else setSubMsg("err:삭제 실패 — 잠시 후 다시 시도해주세요");
+  }
+
+  const bcTargets = (data?.subscribers || []).filter((s) => s.approved && bcChons.includes(parseInt(s.chon, 10) || 4));
+
   async function broadcast() {
     const n = (data?.subscribers || []).filter((s) => s.approved).length;
     if (!bcText.trim()) return;
-    if (!confirm(`승인된 구독자 ${n}명에게 문자를 발송합니다. 진행할까요?`)) return;
+    if (!confirm(`${bcChons.sort().join("·")}촌 구독자 ${bcTargets.length}명에게 발송합니다.\n[이름]은 각자의 이름으로 바뀌고, 사이트 링크·구독취소 링크가 자동으로 붙습니다. 진행할까요?`)) return;
     setBcMsg("발송중...");
     let r;
-    try { r = await post({ action: "broadcast", text: bcText.trim() }); }
+    try { r = await post({ action: "broadcast", text: bcText.trim(), chons: bcChons }); }
     catch (e) { setBcMsg("❌ 네트워크 오류 — 인터넷 연결을 확인해주세요."); return; }
     if (r.error === "no_sms") setBcMsg("❌ Solapi 환경변수(SOLAPI_API_KEY 등)가 아직 설정되지 않았습니다.");
     else if (r.error === "no_target") setBcMsg("❌ 승인된 구독자가 없습니다.");
@@ -513,10 +526,34 @@ export default function Admin() {
                 {subMsg.startsWith("err:") && <DiagLink />}
               </div>
             )}
-            {data.subscribers.length === 0 ? (
-              <div className="adm-msg">아직 구독자가 없습니다.</div>
-            ) : (
-              data.subscribers.map((s) => {
+            {/* ★ v44: 검색·필터 바 */}
+            <div className="ed-row" style={{ marginBottom: 8 }}>
+              <input style={{ flex: 1, minWidth: 0 }} placeholder="🔍 이름·전화·직업 검색" value={subQ} onChange={(e) => setSubQ(e.target.value)} />
+            </div>
+            <div className="ed-row" style={{ flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+              {[["all", "전체"], [1, "1촌"], [2, "2촌"], [3, "3촌"], [4, "4촌"], ["pending", "대기"]].map(([k, label]) => {
+                const cnt = k === "all" ? data.subscribers.length
+                  : k === "pending" ? data.subscribers.filter((x) => !x.approved).length
+                  : data.subscribers.filter((x) => x.approved && (parseInt(x.chon, 10) || 4) === k).length;
+                return (
+                  <button key={k} className={"sm " + (subFilter === k ? "" : "ghost")} onClick={() => setSubFilter(k)}>
+                    {label} {cnt}
+                  </button>
+                );
+              })}
+            </div>
+            {(() => {
+              const q = subQ.trim().toLowerCase();
+              const list = data.subscribers.filter((x) => {
+                if (subFilter === "pending" && x.approved) return false;
+                if (typeof subFilter === "number" && (!x.approved || (parseInt(x.chon, 10) || 4) !== subFilter)) return false;
+                if (q && !((x.name || "") + (x.phone || "") + (x.job || "") + (x.intro || "")).toLowerCase().includes(q)) return false;
+                return true;
+              });
+              return list.length === 0 ? (
+                <div className="adm-msg">{data.subscribers.length === 0 ? "아직 구독자가 없습니다." : "조건에 맞는 구독자가 없습니다."}</div>
+              ) : (
+              list.map((s) => {
                 const e = edits[s.id] || {};
                 const chonVal = e.chon ?? s.chon ?? 4;
                 const apvVal = e.approved ?? (s.approved ? "Y" : "N");
@@ -532,6 +569,8 @@ export default function Admin() {
                     <div className="meta">{s.phone}</div>
                     {/* ★ 표시 정보 직접 수정 — 사이트 인맥 칸에 노출되는 값 */}
                     <div className="ctrl" style={{ marginTop: 6, flexWrap: "wrap" }}>
+                      <input style={{ width: 46, textAlign: "center" }} value={e.icon ?? s.icon ?? "🙋"} maxLength={4} title="프로필 이모티콘"
+                        onChange={(ev) => setEdit(s.id, { icon: ev.target.value })} />
                       <input style={{ width: 100 }} value={e.name ?? s.name ?? ""} placeholder="이름(비공개)"
                         onChange={(ev) => setEdit(s.id, { name: ev.target.value })} />
                       <input style={{ width: 110 }} value={e.job ?? s.job ?? ""} placeholder="직업(공개)"
@@ -548,12 +587,14 @@ export default function Admin() {
                         <option value="Y">승인</option>
                       </select>
                       <button className="sm" onClick={() => save(s)}>저장</button>
+                      <button className="sm ghost" style={{ color: "#ff8f8f", borderColor: "#5c2a2a" }} onClick={() => delSub(s)}>삭제</button>
                       {savedId === s.id && <span className="saved">저장됨 ✓</span>}
                     </div>
                   </div>
                 );
               })
-            )}
+              );
+            })()}
           </div>
 
           {/* 패치노트 관리 */}
@@ -869,12 +910,30 @@ export default function Admin() {
               <button className="sm ghost" disabled={testTo.replace(/\D/g, "").length < 10 || testBusy} onClick={testSms}>{testBusy ? "발송중..." : "테스트 발송"}</button>
             </div>
             {testMsg && <div className="adm-msg" style={{ padding: "0 0 10px", textAlign: "left" }}>{testMsg}</div>}
+            <div className="ed-row" style={{ flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+              <span className="adm-msg" style={{ padding: 0 }}>받는 사람:</span>
+              {[1, 2, 3, 4].map((n) => (
+                <button key={n} className={"sm " + (bcChons.includes(n) ? "" : "ghost")}
+                  onClick={() => setBcChons(bcChons.includes(n) ? bcChons.filter((x) => x !== n) : [...bcChons, n])}>
+                  {n}촌 {(data.subscribers || []).filter((x) => x.approved && (parseInt(x.chon, 10) || 4) === n).length}
+                </button>
+              ))}
+              <b style={{ color: "var(--gold)", fontSize: 13 }}>→ 총 {bcTargets.length}명</b>
+            </div>
             <textarea rows={3} value={bcText} maxLength={1000} style={{ resize: "vertical" }}
-              placeholder="예: [전성훈 상태창] 패치노트 v1.2 — AI 사주 플랫폼 오픈했습니다. sunghoon-nine.vercel.app"
+              placeholder="예: [전성훈 상태창] [이름]님, AI 사주 플랫폼이 오픈했어요!  ← [이름]은 각자 이름으로 자동 변환"
               onChange={(e) => setBcText(e.target.value)} />
+            {bcText.includes("[이름]") && bcTargets[0] && (
+              <div className="adm-msg" style={{ padding: "8px 0 0", textAlign: "left" }}>
+                미리보기 ({bcTargets[0].name}님에게): "{bcText.replace(/\[이름\]/g, bcTargets[0].name)}"
+              </div>
+            )}
+            <div className="adm-msg" style={{ padding: "6px 0 0", textAlign: "left", opacity: 0.75 }}>
+              모든 문자 끝에 사이트 링크와 구독취소 링크가 자동으로 붙습니다.
+            </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
               <span className="adm-msg" style={{ padding: 0 }}>{bcMsg}</span>
-              <button className="sm" disabled={!bcText.trim()} onClick={broadcast}>발송</button>
+              <button className="sm" disabled={!bcText.trim() || bcTargets.length === 0} onClick={broadcast}>발송</button>
             </div>
           </div>
         </>

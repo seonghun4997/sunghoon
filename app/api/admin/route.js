@@ -1,4 +1,4 @@
-import { sb, kstDayStart, isApproved, readLatestConfig, writeNewConfig } from "@/lib/supabase";
+import { sb, kstDayStart, isApproved, readLatestConfig, writeNewConfig, unsubToken } from "@/lib/supabase";
 import { mergeConfig } from "@/lib/config";
 import { sendSMS } from "@/lib/solapi";
 import { NextResponse } from "next/server";
@@ -109,14 +109,28 @@ export async function POST(req) {
       return NextResponse.json({ ok: !!r.ok, detail, raw: r.ok ? undefined : JSON.stringify(r.data || r.error || "").slice(0, 300) });
     }
 
-    // 승인된 구독자 전체 문자 발송
+    // 구독자 삭제
+    if (b.action === "delsub") {
+      const { error } = await client.from("subscribers").delete().eq("id", b.id);
+      if (error) return NextResponse.json({ error: "db" }, { status: 500 });
+      return NextResponse.json({ ok: true });
+    }
+
+    // ★ v44 단체 문자: 촌수 선택 + [이름] 자동 치환 + 링크·구독취소 자동 첨부
     if (b.action === "broadcast") {
       const text = String(b.text || "").trim();
       if (!text) return NextResponse.json({ error: "invalid" }, { status: 400 });
-      const { data } = await client.from("subscribers").select("phone").eq("approved", true);
-      const phones = (data || []).map((s) => s.phone);
-      if (phones.length === 0) return NextResponse.json({ error: "no_target" });
-      const r = await sendSMS(phones, text);
+      const chons = Array.isArray(b.chons) && b.chons.length ? b.chons.map((n) => parseInt(n, 10)) : [1, 2, 3, 4];
+      const { data } = await client.from("subscribers").select("name,phone_digits,chon,approved");
+      const targets = (data || []).filter((s) => isApproved(s.approved) && chons.includes(parseInt(s.chon, 10) || 4));
+      if (targets.length === 0) return NextResponse.json({ error: "no_target" });
+      const messages = targets.map((t) => {
+        let msg = text.replace(/\[이름\]/g, t.name || "구독자");
+        if (!msg.includes("sunghoon-nine.vercel.app")) msg += "\n" + SITE;
+        msg += "\n구독취소: " + SITE + "/bye?p=" + t.phone_digits + "&t=" + unsubToken(t.phone_digits);
+        return { to: t.phone_digits, text: msg };
+      });
+      const r = await sendSMS(messages, "");
       if (r.skipped) return NextResponse.json({ error: "no_sms" });
       return NextResponse.json({ ok: true, count: r.count });
     }
@@ -134,6 +148,7 @@ export async function POST(req) {
     if (typeof b.name === "string") patch.name = b.name.trim().slice(0, 20);
     if (typeof b.job === "string") patch.job = b.job.trim().slice(0, 10);
     if (typeof b.intro === "string") patch.intro = b.intro.trim().slice(0, 20);
+    if (typeof b.icon === "string") patch.icon = b.icon.trim().slice(0, 4);
     const { error } = await client.from("subscribers").update(patch).eq("id", b.id);
     if (error) return NextResponse.json({ error: "db" }, { status: 500 });
     // ★ v39: 방금 기록된 행을 다시 읽어 그대로 반환 (프론트가 대조 검증)
@@ -142,9 +157,10 @@ export async function POST(req) {
     // 대기 → 승인으로 바뀐 순간, 환영 문자 자동 발송
     let sms = null;
     if (before && !isApproved(before.approved) && patch.approved === true) {
+      const dg = String(before.phone || "").replace(/\D/g, "");
       sms = await sendSMS(
-        before.phone,
-        `[전성훈 상태창] ${before.name}님, 4촌 등록이 승인됐습니다! 앞으로 사업·인맥 소식을 보내드릴게요. ${SITE}`
+        dg,
+        `[전성훈 상태창] ${before.name}님, 4촌 등록이 승인됐습니다! 앞으로 사업·인맥 소식을 보내드릴게요.\n${SITE}\n구독취소: ${SITE}/bye?p=${dg}&t=${unsubToken(dg)}`
       );
     }
     return NextResponse.json({ ok: true, smsSent: sms ? !sms.skipped : false, row: after ? { id: after.id, chon: parseInt(after.chon, 10) || 4, approved: isApproved(after.approved), name: after.name || "", job: after.job || "", intro: after.intro || "" } : null });

@@ -26,7 +26,7 @@ export default function Home() {
   const [subOpen, setSubOpen] = useState(false);
   const [subDone, setSubDone] = useState(false);
   const [sending, setSending] = useState(false);
-  const [form, setForm] = useState({ name: "", phone: "", job: "", intro: "" });
+  const [form, setForm] = useState({ name: "", phone: "", job: "", intro: "", icon: "🙋" });
   const [toastMsg, setToastMsg] = useState("");
   const [lock, setLock] = useState(null); // {title, desc} — 구독 유도 모달
   const [viewer, setViewer] = useState(null); // {chon, name} — 인증된 구독자 등급 (null = 미구독 방문자)
@@ -181,6 +181,9 @@ export default function Home() {
       if (d.error === "dup") { toast("이미 구독된 번호입니다"); setSending(false); return; }
       if (!d.ok) { toast("전송 실패 — 다시 시도해주세요"); setSending(false); return; }
       setSubDone(true);
+      // ★ v44: 자동 승인 — 구독 즉시 4촌 등급으로 잠금해제
+      setViewer({ chon: d.chon || 4, name: form.name });
+      try { localStorage.setItem("viewer_phone", form.phone); } catch (e) {}
     } catch (e) {
       toast("전송 실패 — 다시 시도해주세요");
     }
@@ -352,7 +355,7 @@ export default function Home() {
           const dyn = membersOf(chon);
           const all = [
             ...(g.people || []).map((p) => [p.icon, p.job, p.desc]),
-            ...dyn.map((m) => ["🙋", m.job, m.intro || ""]),
+            ...dyn.map((m) => [m.icon || "🙋", m.job, m.intro || ""]),
           ];
           if (chon === 4) {
             return (
@@ -548,9 +551,9 @@ export default function Home() {
             {subDone ? (
               <div className="centerpad">
                 <div style={{ fontSize: 32 }}>📡</div>
-                <div style={{ fontWeight: 800, fontSize: 17, marginTop: 10, color: "var(--mp)" }}>구독 접수 완료!</div>
+                <div style={{ fontWeight: 800, fontSize: 17, marginTop: 10, color: "var(--mp)" }}>4촌 등록 완료!</div>
                 <div style={{ fontSize: 13.5, color: "var(--dim)", marginTop: 6 }}>
-                  승인되면 4촌 명단에 등록됩니다.<br />사업·인맥 업데이트가 문자로 갑니다.
+                  이 화면이 바로 4촌 등급으로 열렸습니다 🔓<br />사업·인맥 업데이트가 문자로 갑니다.
                 </div>
                 <div style={{ marginTop: 18 }}><button onClick={() => setSubOpen(false)}>닫기</button></div>
               </div>
@@ -560,7 +563,15 @@ export default function Home() {
                   <h2 style={{ fontSize: 17 }}>구독 = 4촌 등록</h2>
                   <span className="en" style={{ color: "var(--mp)" }}>SUBSCRIBE</span>
                 </div>
-                <div className="desc">신청 후 승인되면 4촌에 등록됩니다. 이름은 비공개, 직업과 소개만 표시됩니다.</div>
+                <div className="desc">신청하면 <b style={{ color: "var(--mp)" }}>바로 4촌으로 등록</b>됩니다. 이름은 비공개 — 아이콘·직업·자랑 한 줄만 공개돼요.</div>
+                <div className="fgroup">
+                  <div className="flabel">프로필 아이콘 (공개)</div>
+                  <div className="iconpick">
+                    {["🙋","😎","🚀","💼","💰","🩺","⚖️","📈","🎨","🍳","🏗️","💻","📚","🧠","🔥","🌟"].map((ic) => (
+                      <button key={ic} type="button" className={form.icon === ic ? "on" : ""} onClick={() => setForm({ ...form, icon: ic })}>{ic}</button>
+                    ))}
+                  </div>
+                </div>
                 <div className="fgroup">
                   <div className="flabel">이름 (비공개 · 연락용)</div>
                   <input value={form.name} maxLength={20} placeholder="홍길동"
@@ -577,8 +588,8 @@ export default function Home() {
                     onChange={(e) => setForm({ ...form, job: e.target.value })} />
                 </div>
                 <div className="fgroup">
-                  <div className="flabel">나를 소개하는 한 줄 <span style={{ opacity: 0.6 }}>(20자 이내)</span></div>
-                  <textarea value={form.intro} maxLength={20} rows={2} placeholder="예: 뷰티 브랜드 3개 키워봄"
+                  <div className="flabel">나를 자랑하는 한 줄 <span style={{ opacity: 0.6 }}>(20자 이내 · 공개)</span></div>
+                  <textarea value={form.intro} maxLength={20} rows={2} placeholder="예: 매출 100억 만들어 본 마케터"
                     style={{ resize: "vertical" }}
                     onChange={(e) => setForm({ ...form, intro: e.target.value })} />
                 </div>
