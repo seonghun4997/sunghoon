@@ -24,7 +24,7 @@ export async function GET(req) {
       client.from("visits").select("*", { count: "exact", head: true }).eq("src", "share"),
       client.from("subscribers").select("*").order("created_at", { ascending: false }),
       client.from("patchnotes").select("*").order("created_at", { ascending: false }),
-      client.from("site_config").select("data").eq("id", 1).maybeSingle(),
+      client.from("site_config").select("data,updated_at").eq("id", 1).maybeSingle(),
     ]);
     const list = subs.data || [];
     const total = vt.count || 0;
@@ -42,6 +42,7 @@ export async function GET(req) {
       subscribers: list,
       notes: notes.data || [],
       config: mergeConfig(cfgRow?.data?.data),
+      configUpdatedAt: cfgRow?.data?.updated_at || null,
       smsReady: !!(process.env.SOLAPI_API_KEY && process.env.SOLAPI_API_SECRET && process.env.SOLAPI_SENDER),
     });
   } catch (e) {
@@ -61,7 +62,13 @@ export async function POST(req) {
         .from("site_config")
         .upsert({ id: 1, data: b.data || {}, updated_at: new Date().toISOString() });
       if (error) return NextResponse.json({ error: "db", detail: error.message }, { status: 500 });
-      return NextResponse.json({ ok: true });
+      // 저장 직후 디비에서 다시 읽어와서 그대로 반환 (프론트가 대조 검증)
+      const { data: check } = await client
+        .from("site_config")
+        .select("data,updated_at")
+        .eq("id", 1)
+        .single();
+      return NextResponse.json({ ok: true, saved: check?.data || null, at: check?.updated_at || null });
     }
 
     // 패치노트 등록

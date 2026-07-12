@@ -20,12 +20,12 @@ export async function GET() {
       const { error } = await client.from(t).select("*", { count: "exact", head: true });
       report.읽기[t] = error ? "❌ " + error.message : "✅";
     }
-    // 쓰기 테스트: site_config에 upsert 시도 (저장 & 반영과 동일한 동작)
-    const { data: cur } = await client.from("site_config").select("data").eq("id", 1).maybeSingle();
+    // 쓰기 테스트: 실데이터는 건드리지 않고 별도 검사행(id 999)으로 확인 후 삭제
     const { error: werr } = await client
       .from("site_config")
-      .upsert({ id: 1, data: cur?.data || {}, updated_at: new Date().toISOString() });
+      .upsert({ id: 999, data: { probe: true }, updated_at: new Date().toISOString() });
     report.쓰기테스트 = werr ? "❌ " + werr.message : "✅ 저장 가능";
+    if (!werr) await client.from("site_config").delete().eq("id", 999);
   } catch (e) {
     report.오류 = String(e.message || e);
   }

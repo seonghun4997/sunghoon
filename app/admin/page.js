@@ -14,6 +14,8 @@ export default function Admin() {
   const [bcText, setBcText] = useState("");
   const [bcMsg, setBcMsg] = useState("");
   const [cfg, setCfg] = useState(null);
+  const [cfgDirty, setCfgDirty] = useState(false);
+  const [cfgSavedAt, setCfgSavedAt] = useState(null);
   const [cfgMsg, setCfgMsg] = useState("");
   const frameRef = useRef(null);
 
@@ -25,7 +27,8 @@ export default function Admin() {
       if (d.error) return false;
       setData(d);
       setEdits({});
-      if (d.config) setCfg(mergeConfig(d.config));
+      if (d.config && !cfgDirty) setCfg(mergeConfig(d.config));
+      if (d.configUpdatedAt) setCfgSavedAt(d.configUpdatedAt);
       return true;
     } catch (e) { return false; }
   }
@@ -85,33 +88,34 @@ export default function Admin() {
   }
 
   /* ── 사이트 편집기 헬퍼 ── */
-  const setText = (k, v) => setCfg({ ...cfg, texts: { ...cfg.texts, [k]: v } });
+  const updateCfg = (next) => { setCfg(next); setCfgDirty(true); };
+  const setText = (k, v) => updateCfg({ ...cfg, texts: { ...cfg.texts, [k]: v } });
   const moveSection = (i, dir) => {
     const o = [...cfg.order];
     const j = i + dir;
     if (j < 0 || j >= o.length) return;
     [o[i], o[j]] = [o[j], o[i]];
-    setCfg({ ...cfg, order: o });
+    updateCfg({ ...cfg, order: o });
   };
   const toggleHidden = (k) =>
-    setCfg({
+    updateCfg({
       ...cfg,
       hidden: cfg.hidden.includes(k) ? cfg.hidden.filter((x) => x !== k) : [...cfg.hidden, k],
     });
   const listOps = (arrName) => ({
     set: (i, field, v) => {
       const arr = cfg[arrName].map((it, idx) => (idx === i ? { ...it, [field]: v } : it));
-      setCfg({ ...cfg, [arrName]: arr });
+      updateCfg({ ...cfg, [arrName]: arr });
     },
     move: (i, dir) => {
       const arr = [...cfg[arrName]];
       const j = i + dir;
       if (j < 0 || j >= arr.length) return;
       [arr[i], arr[j]] = [arr[j], arr[i]];
-      setCfg({ ...cfg, [arrName]: arr });
+      updateCfg({ ...cfg, [arrName]: arr });
     },
-    del: (i) => setCfg({ ...cfg, [arrName]: cfg[arrName].filter((_, idx) => idx !== i) }),
-    add: (item) => setCfg({ ...cfg, [arrName]: [...cfg[arrName], item] }),
+    del: (i) => updateCfg({ ...cfg, [arrName]: cfg[arrName].filter((_, idx) => idx !== i) }),
+    add: (item) => updateCfg({ ...cfg, [arrName]: [...cfg[arrName], item] }),
   });
   const infoOps = cfg ? listOps("info") : null;
   const statOps = cfg ? listOps("stats") : null;
@@ -119,12 +123,21 @@ export default function Admin() {
 
   async function saveConfig() {
     setCfgMsg("저장중...");
+    const sent = JSON.stringify(cfg);
     const r = await post({ action: "saveconfig", data: cfg });
     if (r.error === "db") { setCfgMsg("❌ 저장 실패 — " + (r.detail || "디비 오류")); return; }
-    if (!r.ok) { setCfgMsg("❌ 저장 실패 (" + JSON.stringify(r) + ")"); return; }
-    setCfgMsg("✓ 저장됨 — 미리보기 갱신중");
+    if (!r.ok || !r.saved) { setCfgMsg("❌ 저장 실패 (" + JSON.stringify(r).slice(0, 120) + ")"); return; }
+    const back = mergeConfig(r.saved);
+    setCfg(back);
+    setCfgDirty(false);
+    setCfgSavedAt(r.at || null);
+    if (JSON.stringify(back) !== sent) {
+      setCfgMsg("⚠️ 저장은 됐지만 보낸 값과 디비 값이 달라요 — 이 화면을 캡처해주세요");
+      return;
+    }
+    setCfgMsg("✓ 디비 저장·검증 완료 — 사이트를 새로고침하면 반영됩니다");
     if (frameRef.current) frameRef.current.src = "/?preview=" + Date.now();
-    setTimeout(() => setCfgMsg(""), 2500);
+    setTimeout(() => setCfgMsg(""), 6000);
   }
 
   const setEdit = (id, patch) => setEdits((p) => ({ ...p, [id]: { ...(p[id] || {}), ...patch } }));
@@ -276,7 +289,10 @@ export default function Admin() {
                 <button className="sm" onClick={saveConfig}>저장 &amp; 반영</button>
               </div>
               <div className="adm-msg" style={{ padding: "0 0 10px", textAlign: "left" }}>
-                아래에서 수정하고 <b>저장 &amp; 반영</b>을 누르면 실사이트와 미리보기에 즉시 적용됩니다. {cfgMsg && <b style={{ color: "var(--hp)" }}>{cfgMsg}</b>}
+                수정 후 <b>저장 &amp; 반영</b>을 누르세요. 저장은 디비에 기록된 걸 다시 읽어 검증까지 마친 뒤에만 성공으로 표시됩니다.
+                {cfgSavedAt && <> · 마지막 저장 {String(cfgSavedAt).slice(0, 16).replace("T", " ")}</>}
+                {cfgDirty && <b style={{ color: "var(--gold)" }}> · 저장 안 된 수정사항 있음</b>}
+                <br />{cfgMsg && <b style={{ color: cfgMsg.startsWith("✓") ? "var(--hp)" : "var(--red)" }}>{cfgMsg}</b>}
               </div>
 
               {/* 실사이트 미리보기 */}
