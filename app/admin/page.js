@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef } from "react";
+import { SECTION_LABELS, mergeConfig } from "@/lib/config";
 
 export default function Admin() {
   const [key, setKey] = useState("");
@@ -12,6 +13,9 @@ export default function Admin() {
   const [noteContent, setNoteContent] = useState("");
   const [bcText, setBcText] = useState("");
   const [bcMsg, setBcMsg] = useState("");
+  const [cfg, setCfg] = useState(null);
+  const [cfgMsg, setCfgMsg] = useState("");
+  const frameRef = useRef(null);
 
   async function load(k = key) {
     try {
@@ -21,6 +25,7 @@ export default function Admin() {
       if (d.error) return false;
       setData(d);
       setEdits({});
+      if (d.config) setCfg(mergeConfig(d.config));
       return true;
     } catch (e) { return false; }
   }
@@ -54,7 +59,9 @@ export default function Admin() {
 
   async function addNote() {
     if (!noteVer.trim() || !noteContent.trim()) return;
-    await post({ action: "addnote", version: noteVer.trim(), content: noteContent.trim() });
+    const r = await post({ action: "addnote", version: noteVer.trim(), content: noteContent.trim() });
+    if (r.error === "db") { alert("저장 실패 — Supabase에 patchnotes 테이블이 없을 수 있습니다. SQL을 먼저 실행해주세요."); return; }
+    if (!r.ok) { alert("저장 실패 — 잠시 후 다시 시도해주세요."); return; }
     setNoteVer(""); setNoteContent("");
     load();
   }
@@ -75,6 +82,49 @@ export default function Admin() {
     else if (r.error === "no_target") setBcMsg("❌ 승인된 구독자가 없습니다.");
     else if (r.ok) { setBcMsg(`✓ ${r.count}명에게 발송 완료`); setBcText(""); }
     else setBcMsg("❌ 발송 실패 — 잠시 후 다시 시도해주세요.");
+  }
+
+  /* ── 사이트 편집기 헬퍼 ── */
+  const setText = (k, v) => setCfg({ ...cfg, texts: { ...cfg.texts, [k]: v } });
+  const moveSection = (i, dir) => {
+    const o = [...cfg.order];
+    const j = i + dir;
+    if (j < 0 || j >= o.length) return;
+    [o[i], o[j]] = [o[j], o[i]];
+    setCfg({ ...cfg, order: o });
+  };
+  const toggleHidden = (k) =>
+    setCfg({
+      ...cfg,
+      hidden: cfg.hidden.includes(k) ? cfg.hidden.filter((x) => x !== k) : [...cfg.hidden, k],
+    });
+  const listOps = (arrName) => ({
+    set: (i, field, v) => {
+      const arr = cfg[arrName].map((it, idx) => (idx === i ? { ...it, [field]: v } : it));
+      setCfg({ ...cfg, [arrName]: arr });
+    },
+    move: (i, dir) => {
+      const arr = [...cfg[arrName]];
+      const j = i + dir;
+      if (j < 0 || j >= arr.length) return;
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+      setCfg({ ...cfg, [arrName]: arr });
+    },
+    del: (i) => setCfg({ ...cfg, [arrName]: cfg[arrName].filter((_, idx) => idx !== i) }),
+    add: (item) => setCfg({ ...cfg, [arrName]: [...cfg[arrName], item] }),
+  });
+  const infoOps = cfg ? listOps("info") : null;
+  const statOps = cfg ? listOps("stats") : null;
+  const bizOps = cfg ? listOps("biz") : null;
+
+  async function saveConfig() {
+    setCfgMsg("저장중...");
+    const r = await post({ action: "saveconfig", data: cfg });
+    if (r.error === "db") { setCfgMsg("❌ 저장 실패 — site_config 테이블이 없을 수 있습니다. SQL을 실행해주세요."); return; }
+    if (!r.ok) { setCfgMsg("❌ 저장 실패"); return; }
+    setCfgMsg("✓ 저장됨 — 미리보기 갱신중");
+    if (frameRef.current) frameRef.current.src = "/?preview=" + Date.now();
+    setTimeout(() => setCfgMsg(""), 2500);
   }
 
   const setEdit = (id, patch) => setEdits((p) => ({ ...p, [id]: { ...(p[id] || {}), ...patch } }));
@@ -215,6 +265,154 @@ export default function Admin() {
               </div>
             ))}
           </div>
+
+          {/* 사이트 편집기 */}
+          {cfg && (
+            <div className="card">
+              <div className="toolbar">
+                <div className="sechead" style={{ border: "none", padding: 0, margin: 0 }}>
+                  <h2>사이트 편집기</h2><span className="en">EDITOR</span>
+                </div>
+                <button className="sm" onClick={saveConfig}>저장 &amp; 반영</button>
+              </div>
+              <div className="adm-msg" style={{ padding: "0 0 10px", textAlign: "left" }}>
+                아래에서 수정하고 <b>저장 &amp; 반영</b>을 누르면 실사이트와 미리보기에 즉시 적용됩니다. {cfgMsg && <b style={{ color: "var(--hp)" }}>{cfgMsg}</b>}
+              </div>
+
+              {/* 실사이트 미리보기 */}
+              <div className="ed-frame">
+                <iframe ref={frameRef} src="/" title="미리보기" />
+              </div>
+
+              {/* 섹션 순서/표시 */}
+              <details className="ed-group" open>
+                <summary>섹션 순서 · 표시</summary>
+                {cfg.order.map((k, i) => (
+                  <div className="ed-row" key={k}>
+                    <span style={{ flex: 1, fontSize: 14, fontWeight: 600, opacity: cfg.hidden.includes(k) ? 0.4 : 1 }}>
+                      {SECTION_LABELS[k] || k}
+                    </span>
+                    <button className="sm ghost" onClick={() => moveSection(i, -1)}>▲</button>
+                    <button className="sm ghost" onClick={() => moveSection(i, 1)}>▼</button>
+                    <button className="sm ghost" onClick={() => toggleHidden(k)}>
+                      {cfg.hidden.includes(k) ? "숨김" : "표시"}
+                    </button>
+                  </div>
+                ))}
+              </details>
+
+              {/* 핵심 문구 */}
+              <details className="ed-group">
+                <summary>핵심 문구</summary>
+                {[
+                  ["dialog", "인카운터 대사"],
+                  ["titleChip", "칭호"],
+                  ["name", "이름"],
+                  ["subtitle", "직함"],
+                  ["tagline", "태그라인"],
+                  ["level", "레벨"],
+                ].map(([k, label]) => (
+                  <div className="fgroup" key={k}>
+                    <div className="flabel">{label}</div>
+                    <input value={cfg.texts[k]} onChange={(e) => setText(k, e.target.value)} />
+                  </div>
+                ))}
+              </details>
+
+              {/* 기본 정보 */}
+              <details className="ed-group">
+                <summary>기본 정보</summary>
+                {cfg.info.map((row, i) => (
+                  <div className="ed-row" key={i}>
+                    <input style={{ width: 90, flexShrink: 0 }} value={row.k} onChange={(e) => infoOps.set(i, "k", e.target.value)} />
+                    <input style={{ flex: 1, minWidth: 0 }} value={row.v} onChange={(e) => infoOps.set(i, "v", e.target.value)} />
+                    <button className="sm ghost" onClick={() => infoOps.move(i, -1)}>▲</button>
+                    <button className="sm ghost" onClick={() => infoOps.move(i, 1)}>▼</button>
+                    <button className="sm ghost" onClick={() => infoOps.del(i)}>✕</button>
+                  </div>
+                ))}
+                <button className="sm" onClick={() => infoOps.add({ k: "항목", v: "내용" })}>+ 항목 추가</button>
+              </details>
+
+              {/* 스텟 */}
+              <details className="ed-group">
+                <summary>스텟</summary>
+                {cfg.stats.map((s, i) => (
+                  <div className="ed-row" key={i}>
+                    <input style={{ flex: 1, minWidth: 0 }} value={s.name} onChange={(e) => statOps.set(i, "name", e.target.value)} />
+                    <select style={{ width: 70, flexShrink: 0 }} value={s.v} onChange={(e) => statOps.set(i, "v", parseInt(e.target.value, 10))}>
+                      {Array.from({ length: 10 }, (_, n) => <option key={n + 1} value={n + 1}>{n + 1}</option>)}
+                    </select>
+                    <button className="sm ghost" onClick={() => statOps.move(i, -1)}>▲</button>
+                    <button className="sm ghost" onClick={() => statOps.move(i, 1)}>▼</button>
+                    <button className="sm ghost" onClick={() => statOps.del(i)}>✕</button>
+                  </div>
+                ))}
+                <button className="sm" onClick={() => statOps.add({ name: "새 스텟", v: 5 })}>+ 스텟 추가</button>
+              </details>
+
+              {/* 사업 */}
+              <details className="ed-group">
+                <summary>사업 목록</summary>
+                <div className="fgroup">
+                  <div className="flabel">섹션 제목</div>
+                  <input value={cfg.texts.bizTitle} onChange={(e) => setText("bizTitle", e.target.value)} />
+                </div>
+                <div className="fgroup">
+                  <div className="flabel">설명 문구</div>
+                  <input value={cfg.texts.bizDesc} onChange={(e) => setText("bizDesc", e.target.value)} />
+                </div>
+                {cfg.biz.map((b, i) => (
+                  <div className="ed-biz" key={i}>
+                    <div className="ed-row">
+                      <input style={{ width: 52, flexShrink: 0, textAlign: "center" }} value={b.icon} onChange={(e) => bizOps.set(i, "icon", e.target.value)} />
+                      <input style={{ flex: 1, minWidth: 0 }} value={b.name} onChange={(e) => bizOps.set(i, "name", e.target.value)} />
+                      <select style={{ width: 92, flexShrink: 0 }} value={b.stage} onChange={(e) => bizOps.set(i, "stage", e.target.value)}>
+                        <option>고도화</option><option>초기</option>
+                      </select>
+                    </div>
+                    <div className="ed-row">
+                      <input style={{ flex: 1, minWidth: 0 }} value={b.tag} onChange={(e) => bizOps.set(i, "tag", e.target.value)} placeholder="이커머스 · 3개 · 2024년~" />
+                      <button className="sm ghost" onClick={() => bizOps.move(i, -1)}>▲</button>
+                      <button className="sm ghost" onClick={() => bizOps.move(i, 1)}>▼</button>
+                      <button className="sm ghost" onClick={() => bizOps.del(i)}>✕</button>
+                    </div>
+                  </div>
+                ))}
+                <button className="sm" onClick={() => bizOps.add({ icon: "🆕", name: "새 사업", tag: "카테고리 · 1개", stage: "초기" })}>+ 사업 추가</button>
+              </details>
+
+              {/* 섹션 문구 */}
+              <details className="ed-group">
+                <summary>섹션 문구 (인맥·구독·포획)</summary>
+                {[
+                  ["netDesc", "인맥 설명"],
+                  ["subTitle", "구독 버튼 문구"],
+                  ["subDesc", "구독 설명"],
+                  ["ctaLine", "포획 첫 줄"],
+                  ["ctaVerbBefore", "잡기 전 어미"],
+                  ["ctaVerbAfter", "잡은 후 어미"],
+                  ["ctaWelcome", "환영 문구"],
+                  ["ctaLocation", "위치 문구"],
+                  ["caughtLine", "포획 성공 대사"],
+                ].map(([k, label]) => (
+                  <div className="fgroup" key={k}>
+                    <div className="flabel">{label}</div>
+                    <input value={cfg.texts[k]} onChange={(e) => setText(k, e.target.value)} />
+                  </div>
+                ))}
+                <div className="fgroup">
+                  <div className="flabel">미팅 안내 (줄바꿈 가능)</div>
+                  <textarea rows={2} value={cfg.texts.ctaMeeting} style={{ resize: "vertical" }}
+                    onChange={(e) => setText("ctaMeeting", e.target.value)} />
+                </div>
+              </details>
+
+              <div style={{ textAlign: "right", marginTop: 14 }}>
+                <button onClick={saveConfig}>저장 &amp; 반영</button>
+              </div>
+            </div>
+          )}
 
           {/* 단체 문자 */}
           <div className="card">

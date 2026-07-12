@@ -1,4 +1,5 @@
 import { sb, kstDayStart } from "@/lib/supabase";
+import { mergeConfig } from "@/lib/config";
 import { sendSMS } from "@/lib/solapi";
 import { NextResponse } from "next/server";
 
@@ -16,13 +17,14 @@ export async function GET(req) {
   try {
     const client = sb();
     const dayStart = kstDayStart();
-    const [vt, vd, vqr, vshare, subs, notes] = await Promise.all([
+    const [vt, vd, vqr, vshare, subs, notes, cfgRow] = await Promise.all([
       client.from("visits").select("*", { count: "exact", head: true }),
       client.from("visits").select("*", { count: "exact", head: true }).gte("created_at", dayStart),
       client.from("visits").select("*", { count: "exact", head: true }).eq("src", "qr"),
       client.from("visits").select("*", { count: "exact", head: true }).eq("src", "share"),
       client.from("subscribers").select("*").order("created_at", { ascending: false }),
       client.from("patchnotes").select("*").order("created_at", { ascending: false }),
+      client.from("site_config").select("data").eq("id", 1).maybeSingle(),
     ]);
     const list = subs.data || [];
     const total = vt.count || 0;
@@ -39,6 +41,7 @@ export async function GET(req) {
       pending: list.filter((s) => !s.approved).length,
       subscribers: list,
       notes: notes.data || [],
+      config: mergeConfig(cfgRow?.data?.data),
       smsReady: !!(process.env.SOLAPI_API_KEY && process.env.SOLAPI_API_SECRET && process.env.SOLAPI_SENDER),
     });
   } catch (e) {
@@ -51,6 +54,15 @@ export async function POST(req) {
     const b = await req.json();
     if (!authed(b.key)) return NextResponse.json({ error: "denied" }, { status: 401 });
     const client = sb();
+
+    // 사이트 설정 저장
+    if (b.action === "saveconfig") {
+      const { error } = await client
+        .from("site_config")
+        .upsert({ id: 1, data: b.data || {}, updated_at: new Date().toISOString() });
+      if (error) return NextResponse.json({ error: "db" }, { status: 500 });
+      return NextResponse.json({ ok: true });
+    }
 
     // 패치노트 등록
     if (b.action === "addnote") {

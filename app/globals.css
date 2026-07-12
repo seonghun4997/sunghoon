@@ -26,6 +26,53 @@ body{
 .stars i.g{width:3px;height:3px;background:var(--gold)}
 @keyframes twinkle{50%{opacity:.75}}
 
+/* 야생 인카운터 장면 */
+.encounter{position:relative;height:212px;margin-bottom:6px}
+.wild{position:absolute;top:0;right:10px;text-align:center;animation:wildIn .55s ease-out both}
+.wild-img{width:132px;height:132px;image-rendering:pixelated;display:block;margin:0 auto;filter:drop-shadow(0 0 14px rgba(255,201,60,.35));animation:hover 2.8s .6s ease-in-out infinite}
+.trainer{position:absolute;bottom:0;left:14px;text-align:center;animation:trainerIn .55s ease-out both}
+.trainer-img{width:88px;image-rendering:pixelated;display:block;margin:0 auto}
+.platform{width:150px;height:22px;border-radius:50%;background:radial-gradient(ellipse at center,#262A5A 0%,rgba(38,42,90,0) 72%);margin:2px auto 0}
+.platform.small{width:110px;height:16px}
+.balls{position:absolute;bottom:96px;left:110px;display:flex;gap:6px;align-items:center;animation:trainerIn .55s .2s ease-out both}
+.balls i{width:11px;height:11px;border-radius:50%;background:var(--gold);box-shadow:inset -2px -2px 0 rgba(0,0,0,.35)}
+.balls .bracket{width:14px;height:22px;border-right:3px solid var(--text);border-bottom:3px solid var(--text);margin-left:2px;transform:translateY(-6px)}
+@keyframes wildIn{from{transform:translateX(70px);opacity:0}to{transform:none;opacity:1}}
+@keyframes trainerIn{from{transform:translateX(-70px);opacity:0}to{transform:none;opacity:1}}
+@keyframes hover{50%{transform:translateY(-7px)}}
+@media(prefers-reduced-motion:reduce){.wild,.trainer,.balls,.wild-img{animation:none}}
+@media(max-width:380px){.wild-img{width:112px;height:112px}.balls{left:96px}}
+
+/* 이름 옆 LV 뱃지 */
+.lv-inline{font-family:var(--pixel);font-size:10px;background:var(--gold);color:#17182E;border-radius:7px;padding:5px 9px;vertical-align:4px;margin-left:8px}
+
+/* 포획 챌린지 */
+.catch-scene{position:relative;height:236px;margin-bottom:14px}
+.c-wild{position:absolute;top:4px;left:50%;transform:translateX(-50%);text-align:center;transition:transform .3s ease-in,opacity .3s ease-in}
+.c-wild.absorbed{transform:translateX(-50%) scale(0);opacity:0}
+.c-wild-img{width:112px;height:112px;image-rendering:pixelated;display:block;margin:0 auto;filter:drop-shadow(0 0 12px rgba(255,201,60,.32))}
+.cball{width:46px;height:46px;border-radius:50%;position:relative;flex-shrink:0;
+  background:linear-gradient(180deg,#3A3F7E 0 44%,#17182E 44% 56%,#EDE8D6 56% 100%);
+  box-shadow:0 3px 0 rgba(0,0,0,.4)}
+.cball::after{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:14px;height:14px;border-radius:50%;background:var(--gold);border:3px solid #17182E}
+.cball.mini{width:26px;height:26px;display:inline-block;vertical-align:-7px;margin-right:8px;box-shadow:none}
+.cball.mini::after{width:8px;height:8px;border-width:2px}
+.cball.fly{position:absolute;bottom:56px;left:50%;margin-left:-23px;animation:flyArc .6s ease-out forwards}
+.cball.attop{position:absolute;top:44px;left:50%;margin-left:-23px}
+.cball.wob{position:absolute;bottom:78px;left:50%;margin-left:-23px;animation:wob 1.7s ease-in-out}
+@keyframes flyArc{0%{transform:translateY(0) rotate(0)}100%{transform:translateY(-134px) rotate(540deg)}}
+@keyframes wob{0%,90%,100%{transform:rotate(0)}12%{transform:rotate(-24deg)}26%{transform:rotate(19deg)}40%{transform:rotate(-14deg)}54%{transform:rotate(9deg)}68%{transform:rotate(-4deg)}}
+.caught-wrap{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;gap:18px;animation:pop .35s ease-out}
+.caught-row{display:flex;align-items:center;justify-content:center;gap:18px;padding:10px 0 18px;animation:pop .35s ease-out}
+@keyframes pop{from{transform:scale(.6);opacity:0}to{transform:none;opacity:1}}
+.spark{font-size:26px;animation:sparkle 1.2s ease-in-out infinite}
+.spark.s2{animation-delay:.5s}
+@keyframes sparkle{0%,100%{opacity:.4;transform:scale(.85)}50%{opacity:1;transform:scale(1.1)}}
+.throw-btn{position:absolute;bottom:6px;left:50%;transform:translateX(-50%);background:var(--gold);white-space:nowrap;display:flex;align-items:center}
+.throw-btn:active{transform:translateX(-50%) translateY(3px)}
+@media(prefers-reduced-motion:reduce){.cball.fly,.cball.wob,.spark,.caught-wrap{animation:none}}
+
 /* 게임 대화창 */
 .dialog{background:var(--card);border:2px solid var(--gold);border-radius:12px;padding:15px 18px;margin-bottom:20px;position:relative;font-size:15px;font-weight:600;line-height:1.7;min-height:56px}
 .dialog .arrow{position:absolute;right:14px;bottom:8px;color:var(--gold);font-size:13px;animation:bob 1s ease-in-out infinite}
@@ -186,3 +233,17 @@ input:focus,textarea:focus,select:focus{border-color:var(--gold)}
 .adm-msg{text-align:center;font-size:13.5px;color:var(--dim);padding:14px 0}
 .adm-msg.err{color:var(--red)}
 .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+
+/* ── 사이트 편집기 ── */
+.ed-frame{border:2px solid var(--gold);border-radius:18px;overflow:hidden;height:520px;margin-bottom:16px;background:var(--bg)}
+.ed-frame iframe{width:100%;height:100%;border:0}
+.ed-group{border:1px solid var(--line);border-radius:12px;background:var(--card2);padding:0 14px;margin-bottom:10px}
+.ed-group[open]{padding-bottom:14px}
+.ed-group summary{cursor:pointer;font-weight:800;font-size:14.5px;padding:13px 0;list-style:none}
+.ed-group summary::before{content:"▸ ";color:var(--gold)}
+.ed-group[open] summary::before{content:"▾ "}
+.ed-row{display:flex;gap:6px;align-items:center;margin-bottom:8px}
+.ed-row input,.ed-row select{padding:9px 10px;font-size:13.5px}
+.ed-row button.sm{padding:8px 10px;font-size:12px;flex-shrink:0}
+.ed-biz{border:1px dashed var(--line);border-radius:10px;padding:10px 10px 2px;margin-bottom:10px}
+.ed-group .fgroup input,.ed-group .fgroup textarea{font-size:13.5px;padding:10px 12px}

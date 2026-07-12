@@ -29,3 +29,11 @@ create table if not exists patchnotes (
   content text not null
 );
 alter table patchnotes enable row level security;
+
+-- v3 추가분: 사이트 편집기 설정 저장
+create table if not exists site_config (
+  id int primary key,
+  data jsonb not null,
+  updated_at timestamptz default now()
+);
+alter table site_config enable row level security;
