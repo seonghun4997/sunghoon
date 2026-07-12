@@ -19,7 +19,10 @@ export async function GET() {
         .order("created_at", { ascending: false })
         .limit(10),
     ]);
-    return NextResponse.json({ members: data || [], total: count || 0, notes: notes || [] });
+    return NextResponse.json(
+      { members: data || [], total: count || 0, notes: notes || [] },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (e) {
     return NextResponse.json({ members: [], total: 0, notes: [] });
   }

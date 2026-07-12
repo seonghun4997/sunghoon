@@ -171,10 +171,10 @@ export default function Home() {
             <div className="lv">{T.level}</div>
           </div>
           <div style={{ minWidth: 0, paddingTop: 4 }}>
-            <div className="title-chip">{T.titleChip}</div>
+            {T.titleChip?.trim() && <div className="title-chip">{T.titleChip}</div>}
             <div className="name">{T.name}</div>
-            <div className="sub">{T.subtitle}</div>
-            <div className="tagline">{T.tagline}</div>
+            {T.subtitle?.trim() && <div className="sub">{T.subtitle}</div>}
+            {T.tagline?.trim() && <div className="tagline">{T.tagline}</div>}
           </div>
         </div>
       </section>
@@ -211,7 +211,7 @@ export default function Home() {
     biz: (
       <section className="card" key="biz">
         <div className="sechead"><h2>{T.bizTitle}</h2><span className="en">BUSINESS</span></div>
-        <div className="desc">{T.bizDesc}</div>
+        {T.bizDesc?.trim() && <div className="desc">{T.bizDesc}</div>}
         {cfg.biz.map((b, i) => (
           <div className="biz" key={i}>
             <span className="ic">{b.icon}</span>
@@ -220,7 +220,7 @@ export default function Home() {
             <span className="lock">🔒</span>
           </div>
         ))}
-        <div className="note">{T.bizNote}</div>
+        {T.bizNote?.trim() && <div className="note">{T.bizNote}</div>}
       </section>
     ),
 
@@ -243,7 +243,7 @@ export default function Home() {
     network: (
       <section className="card" key="network">
         <div className="sechead"><h2>인맥</h2><span className="en">NETWORK</span></div>
-        <div className="desc">{T.netDesc}</div>
+        {T.netDesc?.trim() && <div className="desc">{T.netDesc}</div>}
         {NET.map(([chon, rule, people]) => {
           const dyn = membersOf(chon);
           const all = [...people, ...dyn.map((m) => ["🙋", m.job, m.intro || ""])];
@@ -342,7 +342,7 @@ export default function Home() {
             {T.ctaLine}<br />
             <span style={{ color: "var(--gold)" }}>{T.name}</span>을 {phase === "caught" ? T.ctaVerbAfter : T.ctaVerbBefore}
           </div>
-          <div className="loc" style={{ marginTop: 6 }}>{T.ctaWelcome}</div>
+          {T.ctaWelcome?.trim() && <div className="loc" style={{ marginTop: 6 }}>{T.ctaWelcome}</div>}
           <div className="loc" style={{ marginTop: 14 }}>
             <ML t={T.ctaMeeting} /><br />
             {T.ctaLocation}
