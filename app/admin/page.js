@@ -1005,7 +1005,7 @@ alter table meetings enable row level security;`}</pre>
             </div>
             <div className="adm-msg" style={{ padding: "0 0 12px", textAlign: "left" }}>
               대기 → 승인으로 바꾸고 저장하면 환영 문자가 자동 발송됩니다{data.smsReady ? "" : " (Solapi 설정 후 활성화)"}.
-              {" "}승인 후 사이트 4촌에 보이는지는{" "}
+              {" "}승인 후 사이트 네트워킹 칸에 보이는지는{" "}
               <a href="/api/public" target="_blank" rel="noreferrer" style={{ color: "var(--mp)", fontWeight: 700, textDecoration: "underline" }}>여기(공개 데이터)</a>
               에서 바로 확인할 수 있어요.
             </div>
