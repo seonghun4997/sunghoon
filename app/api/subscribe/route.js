@@ -37,7 +37,12 @@ export async function POST(req) {
       const m = rc.match(/^(\d+)-([0-9a-f]{10})$/);
       if (m && refToken(m[1]) === m[2]) referrerId = parseInt(m[1], 10);
     }
-    const refName = String(b.refName || "").trim().slice(0, 20) || null;
+    // ★ v63: 추천인/알게 된 계기 + 유입 경로(QR/공유) 자동 결합 → "김도은 소개 · QR 유입"
+    let refName = String(b.refName || "").trim().slice(0, 40) || null;
+    {
+      const srcLabel = { qr: "QR 유입", share: "공유링크 유입" }[String(b.landingSrc || "")] || null;
+      if (srcLabel) refName = refName ? (refName + " · " + srcLabel) : srcLabel;
+    }
     const phone =
       digits.length === 11
         ? digits.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3")

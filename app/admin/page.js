@@ -1057,7 +1057,7 @@ alter table meetings enable row level security;`}</pre>
                       </span>
                       <span className="time">{fmtKST(s.created_at)}</span>
                     </div>
-                    <div className="meta">{s.phone}</div>
+                    <div className="meta">{s.phone}{s.ref_name ? <> · <span style={{ color: "var(--gold)" }}>🧭 {s.ref_name}</span></> : null}{s.referrer_id ? <> · <span style={{ color: "var(--mp)" }}>🔗 추천링크</span></> : null}</div>
                     {/* ★ 표시 정보 직접 수정 — 사이트 인맥 칸에 노출되는 값 */}
                     <div className="ctrl" style={{ marginTop: 6, flexWrap: "wrap" }}>
                       <input style={{ width: 46, textAlign: "center" }} value={e.icon ?? s.icon ?? "🙋"} maxLength={4} title="프로필 이모티콘"

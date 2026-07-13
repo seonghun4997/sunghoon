@@ -331,3 +331,12 @@ button{min-height:42px}
 .hookchip{font-size:12px;border:1px dashed var(--gold);color:var(--text);border-radius:999px;padding:4px 10px;background:rgba(255,201,60,.07)}
 .lockv{font-family:inherit;font-size:12.5px;color:var(--gold);background:rgba(255,201,60,.08);border:1px dashed var(--gold);border-radius:8px;padding:5px 10px;cursor:pointer}
 .sharepill{position:absolute;top:14px;right:14px;z-index:2;font-family:inherit;font-size:12px;font-weight:800;color:#17182E;background:var(--gold);border:none;border-radius:999px;padding:7px 12px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+
+/* ★ v63: 구독폼 한 화면 컴팩트 */
+.subform .fgroup{margin-bottom:9px}
+.subform .flabel{font-size:11.5px;margin-bottom:4px}
+.subform input{padding:9px 10px}
+.subform .frow{display:flex;gap:8px}
+.subform .frow .fgroup{flex:1;min-width:0}
+.subform .iconpick{gap:5px}
+.subform .iconpick button{font-size:17px;padding:5px 0;border-radius:8px}

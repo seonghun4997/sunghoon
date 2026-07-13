@@ -92,6 +92,7 @@ export default function Home() {
     } catch (e) {}
 
     const src = new URLSearchParams(location.search).get("src");
+    try { if (src) sessionStorage.setItem("landing_src", src); } catch (e) {} // ★ v63: 구독 시 유입 경로 자동 결합용
     // ★ v62: 추천 링크(?ref=코드)로 들어오면 저장 → 구독 신청 시 자동 연결
     try {
       const rc = new URLSearchParams(location.search).get("ref");
@@ -246,10 +247,12 @@ export default function Home() {
     try {
       let refCode = "";
       try { refCode = localStorage.getItem("ref_code") || ""; } catch (e) {}
+      let landingSrc = "";
+      try { landingSrc = sessionStorage.getItem("landing_src") || ""; } catch (e) {}
       const r = await fetch("/api/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, refCode }),
+        body: JSON.stringify({ ...form, refCode, landingSrc }),
       });
       const d = await r.json();
       if (d.error === "dup") { toast("이미 구독된 번호입니다"); setSending(false); return; }
@@ -798,46 +801,52 @@ export default function Home() {
                   <h2 style={{ fontSize: 17 }}>구독 신청</h2>
                   <span className="en" style={{ color: "var(--mp)" }}>SUBSCRIBE</span>
                 </div>
-                <div className="desc">신청 후 <b style={{ color: "var(--mp)" }}>구독자로 등록</b>됩니다. 이름·연락처는 비공개 — 아이콘·직업·자랑 한 줄만 공개돼요.</div>
-                <div className="fgroup">
-                  <div className="flabel">프로필 아이콘 (공개)</div>
-                  <div className="iconpick">
-                    {["🙋","😎","🚀","💼","💰","🩺","⚖️","📈","🎨","🍳","🏗️","💻","📚","🧠","🔥","🌟"].map((ic) => (
-                      <button key={ic} type="button" className={form.icon === ic ? "on" : ""} onClick={() => setForm({ ...form, icon: ic })}>{ic}</button>
-                    ))}
+                <div className="desc" style={{ marginBottom: 10 }}>이름·연락처·생일은 <b>비공개</b>, 아이콘·직업·한 줄 소개만 공개돼요.</div>
+                {/* ★ v63: 한 화면 컴팩트 레이아웃 */}
+                <div className="subform">
+                  <div className="fgroup">
+                    <div className="flabel">아이콘 (공개)</div>
+                    <div className="iconpick">
+                      {["🙋","😎","🚀","💼","💰","🩺","⚖️","📈","🎨","🍳","🏗️","💻","📚","🧠","🔥","🌟"].map((ic) => (
+                        <button key={ic} type="button" className={form.icon === ic ? "on" : ""} onClick={() => setForm({ ...form, icon: ic })}>{ic}</button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                <div className="fgroup">
-                  <div className="flabel">이름 (비공개 · 연락용)</div>
-                  <input value={form.name} maxLength={20} placeholder="홍길동"
-                    onChange={(e) => setForm({ ...form, name: e.target.value })} />
-                </div>
-                <div className="fgroup">
-                  <div className="flabel">연락처 (비공개 · 소식 문자 수신용)</div>
-                  <input value={form.phone} inputMode="tel" placeholder="010-0000-0000"
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-                </div>
-                <div className="fgroup">
-                  <div className="flabel">직업 <span style={{ opacity: 0.6 }}>(10자 이내)</span></div>
-                  <input value={form.job} maxLength={10} placeholder="예: 이커머스 마케터"
-                    onChange={(e) => setForm({ ...form, job: e.target.value })} />
-                </div>
-                <div className="fgroup">
-                  <div className="flabel">나를 자랑하는 한 줄 <span style={{ opacity: 0.6 }}>(20자 이내 · 공개)</span></div>
-                  <textarea value={form.intro} maxLength={20} rows={2} placeholder="예: 매출 100억 만들어 본 마케터"
-                    style={{ resize: "vertical" }}
-                    onChange={(e) => setForm({ ...form, intro: e.target.value })} />
-                </div>
-                <div className="fgroup">
-                  <div className="flabel">생일 <span style={{ opacity: 0.6 }}>(선택 · 비공개 — 축하 인사만 드려요)</span></div>
-                  <input value={form.birthday} inputMode="numeric" maxLength={5} placeholder="예: 0514"
-                    onChange={(e) => setForm({ ...form, birthday: e.target.value })} />
-                </div>
-                <div className="fgroup">
-                  <div className="flabel">추천인 <span style={{ opacity: 0.6 }}>(선택 · 비공개 — 추천해주신 분께 감사 선물을 드려요 🍗)</span></div>
-                  <input value={form.refName} maxLength={20} placeholder="나를 추천해준 분 이름"
-                    onChange={(e) => setForm({ ...form, refName: e.target.value })} />
-                  {(() => { try { return localStorage.getItem("ref_code") ? <div className="note" style={{ marginTop: 4 }}>🎁 추천 링크로 접속하셨네요 — 추천인이 자동으로 연결됩니다!</div> : null; } catch (e) { return null; } })()}
+                  <div className="frow">
+                    <div className="fgroup">
+                      <div className="flabel">이름 <span style={{ opacity: 0.6 }}>(비공개)</span></div>
+                      <input value={form.name} maxLength={20} placeholder="홍길동"
+                        onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                    </div>
+                    <div className="fgroup" style={{ flex: 1.3 }}>
+                      <div className="flabel">연락처 <span style={{ opacity: 0.6 }}>(비공개)</span></div>
+                      <input value={form.phone} inputMode="tel" placeholder="010-0000-0000"
+                        onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="frow">
+                    <div className="fgroup" style={{ flex: 1.4 }}>
+                      <div className="flabel">직업 <span style={{ opacity: 0.6 }}>(공개)</span></div>
+                      <input value={form.job} maxLength={10} placeholder="예: 마케터"
+                        onChange={(e) => setForm({ ...form, job: e.target.value })} />
+                    </div>
+                    <div className="fgroup">
+                      <div className="flabel">생일 <span style={{ opacity: 0.6 }}>(선택·비공개)</span></div>
+                      <input value={form.birthday} inputMode="numeric" maxLength={5} placeholder="0514"
+                        onChange={(e) => setForm({ ...form, birthday: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="fgroup">
+                    <div className="flabel">나를 자랑하는 한 줄 <span style={{ opacity: 0.6 }}>(공개)</span></div>
+                    <input value={form.intro} maxLength={20} placeholder="예: 매출 100억 만들어 본 마케터"
+                      onChange={(e) => setForm({ ...form, intro: e.target.value })} />
+                  </div>
+                  <div className="fgroup">
+                    <div className="flabel">추천인 / 알게 된 계기 <span style={{ opacity: 0.6 }}>(선택·비공개 — 추천해주신 분께 감사 선물 🍗)</span></div>
+                    <input value={form.refName} maxLength={40} placeholder="예: 김도은 소개 · 명함 QR · 인스타"
+                      onChange={(e) => setForm({ ...form, refName: e.target.value })} />
+                    {(() => { try { return localStorage.getItem("ref_code") ? <div className="note" style={{ marginTop: 4 }}>🎁 추천 링크로 접속하셨네요 — 추천인이 자동으로 연결됩니다!</div> : null; } catch (e) { return null; } })()}
+                  </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
                   <button className="sm ghost" onClick={() => setSubOpen(false)}>닫기</button>
