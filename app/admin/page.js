@@ -293,6 +293,19 @@ export default function Admin() {
   ];
   const bcManual = bcExclude.length > 0 || bcExtra.length > 0;
 
+  // ★ v58: "실제 도착 문자" 미리보기 조립 — 서버가 붙이는 링크까지 그대로 재현
+  const SITE_URL = "https://sunghoon-nine.vercel.app";
+  const fullSms = (body, sub) => {
+    let msg = String(body || "")
+      .replace(/\[이름\]/g, sub?.name || "구독자")
+      .replace(/\[횟수\]/g, (data?.meetCounts?.[sub?.id] || 0) ? data.meetCounts[sub.id] + "번째" : "이번");
+    if (!msg.includes("sunghoon-nine.vercel.app")) msg += "\n\n사이트방문:\n" + SITE_URL;
+    const dg = String(sub?.phone || "").replace(/\D/g, "") || "010········";
+    msg += "\n\n구독 취소:\n" + SITE_URL + "/bye?p=" + dg + "&t=" + (sub ? "a1b2c3d4e5f6" : "(자동코드)");
+    return "[Web발신]\n" + msg;
+  };
+  const labelWarn = (body) => /사이트\s*방문\s*:|구독\s*취소\s*:/.test(String(body || ""));
+
   // ★ v48: 예약 시각 표시용 (예: "7/14(화) 오전 9:00")
   const fmtAt = (v) => {
     if (!v) return "";
@@ -715,9 +728,6 @@ alter table visits add column if not exists is_admin boolean default false;`}</p
             const todayMeets = (data.meetings || []).filter((m) => String(m.met_on).slice(0, 10) === kToday);
             const tpls = (cfg?.smsTemplates || []);
             const firstTarget = fuIds.length ? subById(fuIds[0]) : null;
-            const previewText = firstTarget
-              ? fuText.replace(/\[이름\]/g, firstTarget.name || "구독자").replace(/\[횟수\]/g, (data.meetCounts?.[firstTarget.id] || 0) ? data.meetCounts[firstTarget.id] + "번째" : "이번")
-              : "";
             return (
               <div className="card">
                 <div className="sechead"><h2>🤝 만남 & 후속 문자</h2><span className="en">FOLLOW-UP</span></div>
@@ -815,9 +825,12 @@ alter table meetings enable row level security;`}</pre>
                     }}>💾 이 내용을 "{fuTpl}" 템플릿으로 저장</button>
                   </div>
                 )}
-                {previewText && (
-                  <div className="adm-msg" style={{ padding: "8px 0 0", textAlign: "left" }}>
-                    미리보기 ({firstTarget.name}님에게): "{previewText}"
+                {fuText.trim() && firstTarget && (
+                  <div style={{ marginTop: 8 }}>
+                    <div className="flabel">📩 실제 도착 문자 미리보기 ({firstTarget.name}님 기준 · 솔라피 발송 시)</div>
+                    {labelWarn(fuText) && <div className="adm-msg" style={{ padding: "0 0 6px", textAlign: "left", color: "var(--red)" }}>⚠️ "사이트방문:" / "구독 취소:" 라벨은 자동으로 붙습니다 — 본문에서 지워주세요</div>}
+                    <pre className="smsprev">{fullSms(fuText, firstTarget)}</pre>
+                    <div className="adm-msg" style={{ padding: "4px 0 0", textAlign: "left", opacity: 0.7 }}>📱 내 폰으로 보낼 땐 [Web발신]·링크 없이 본문만 갑니다.</div>
                   </div>
                 )}
                 {/* ★ v55: 내 폰으로 직접 보내기 — [Web발신] 없이 개인 문자로 발송 */}
@@ -1351,9 +1364,11 @@ alter table meetings enable row level security;`}</pre>
             <textarea rows={3} value={bcText} maxLength={1000} style={{ resize: "vertical" }}
               placeholder="예: [전성훈 상태창] [이름]님, AI 사주 플랫폼이 오픈했어요!  ← [이름]은 각자 이름으로 자동 변환"
               onChange={(e) => setBcText(e.target.value)} />
-            {bcText.includes("[이름]") && bcTargets[0] && (
-              <div className="adm-msg" style={{ padding: "8px 0 0", textAlign: "left" }}>
-                미리보기 ({bcTargets[0].name}님에게): "{bcText.replace(/\[이름\]/g, bcTargets[0].name)}"
+            {bcText.trim() && bcTargets[0] && (
+              <div style={{ marginTop: 8 }}>
+                <div className="flabel">📩 실제 도착 문자 미리보기 ({bcTargets[0].name}님 기준)</div>
+                {labelWarn(bcText) && <div className="adm-msg" style={{ padding: "0 0 6px", textAlign: "left", color: "var(--red)" }}>⚠️ "사이트방문:" / "구독 취소:" 라벨은 자동으로 붙습니다 — 본문에서 지워주세요 (안 지우면 두 번 나와요)</div>}
+                <pre className="smsprev">{fullSms(bcText, bcTargets[0])}</pre>
               </div>
             )}
             <div className="adm-msg" style={{ padding: "6px 0 0", textAlign: "left", opacity: 0.75 }}>
@@ -1381,11 +1396,16 @@ alter table meetings enable row level security;`}</pre>
               <textarea rows={3} maxLength={500} style={{ resize: "vertical", marginTop: 8 }}
                 value={cfg?.welcomeSms || ""}
                 onChange={(e) => updateCfg({ ...cfg, welcomeSms: e.target.value })} />
-              {(cfg?.welcomeSms || "").includes("[이름]") && (
-                <div className="adm-msg" style={{ padding: "6px 0 0", textAlign: "left" }}>
-                  미리보기: "{(cfg?.welcomeSms || "").replace(/\[이름\]/g, "김도은")}"
-                </div>
-              )}
+              {(cfg?.welcomeSms || "").trim() && (() => {
+                const sample = (data.subscribers || []).find((x) => x.approved) || null;
+                return (
+                  <div style={{ marginTop: 8 }}>
+                    <div className="flabel">📩 실제 도착 문자 미리보기 ({sample?.name || "구독자"}님 기준)</div>
+                    {labelWarn(cfg?.welcomeSms) && <div className="adm-msg" style={{ padding: "0 0 6px", textAlign: "left", color: "var(--red)" }}>⚠️ "사이트방문:" / "구독 취소:" 라벨은 자동으로 붙습니다 — 본문에서 지워주세요 (안 지우면 두 번 나와요)</div>}
+                    <pre className="smsprev">{fullSms(cfg?.welcomeSms, sample)}</pre>
+                  </div>
+                );
+              })()}
               <div className="adm-msg" style={{ padding: "6px 0 0", textAlign: "left", opacity: 0.7 }}>
                 [이름]은 승인되는 사람 이름으로 바뀌고, "사이트방문:" / "구독 취소:" 링크가 자동으로 붙습니다. 수정하면 1.5초 뒤 자동 저장됩니다.
               </div>

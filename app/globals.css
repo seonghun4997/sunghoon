@@ -318,3 +318,6 @@ button{min-height:42px}
 .catbtn.on{border-color:var(--gold);background:rgba(255,201,60,.12)}
 .catbtn.on .cc{color:var(--gold);font-weight:800}
 @media (max-width:380px){.catbtn .cn{font-size:10.5px}}
+
+/* ★ v58: 실제 도착 문자 미리보기 */
+.smsprev{white-space:pre-wrap;word-break:break-all;background:#101228;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:12.5px;line-height:1.7;color:var(--text);margin:0}
