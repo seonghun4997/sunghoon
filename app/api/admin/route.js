@@ -39,11 +39,8 @@ export async function GET(req) {
   try {
     const client = sb();
     const dayStart = kstDayStart();
-    const [vt, vd, vqr, vshare, subs, notes, cfgRow] = await Promise.all([
-      client.from("visits").select("*", { count: "exact", head: true }),
-      client.from("visits").select("*", { count: "exact", head: true }).gte("created_at", dayStart),
-      client.from("visits").select("*", { count: "exact", head: true }).eq("src", "qr"),
-      client.from("visits").select("*", { count: "exact", head: true }).eq("src", "share"),
+    // ★ v57 최적화: 방문 통계는 행 1회 조회로 전부 계산 (기존 카운트 쿼리 4개 제거)
+    const [subs, notes, cfgRow] = await Promise.all([
       client.from("subscribers").select("*").order("created_at", { ascending: false }),
       client.from("patchnotes").select("*").neq("version", "__config__").order("created_at", { ascending: false }),
       readLatestConfig(client),
@@ -52,13 +49,23 @@ export async function GET(req) {
     // ★ v50 마케팅 지표: 방문 행을 직접 읽어 어드민 제외/재방문율/체류시간/구독자별 관심도 계산.
     //    새 컬럼 SQL 미실행이면 조용히 기존(총계) 방식만 유지.
     let marketing = { enabled: false, cap };
-    let vTotal = vt.count || 0, vToday = vd.count || 0, vQr = vqr.count || 0, vShare = vshare.count || 0;
+    let vTotal = 0, vToday = 0, vQr = 0, vShare = 0;
     {
       const { data: vr, error: ve } = await client
         .from("visits")
         .select("vid,phone,dur,created_at,src,is_admin")
         .order("created_at", { ascending: false })
         .limit(5000);
+      if (ve) {
+        // 새 컬럼 SQL 미실행 디비 폴백 — 이때만 카운트 쿼리 사용
+        const [vt, vd, vqr, vshare] = await Promise.all([
+          client.from("visits").select("*", { count: "exact", head: true }),
+          client.from("visits").select("*", { count: "exact", head: true }).gte("created_at", dayStart),
+          client.from("visits").select("*", { count: "exact", head: true }).eq("src", "qr"),
+          client.from("visits").select("*", { count: "exact", head: true }).eq("src", "share"),
+        ]);
+        vTotal = vt.count || 0; vToday = vd.count || 0; vQr = vqr.count || 0; vShare = vshare.count || 0;
+      }
       if (!ve && vr) {
         const rows = vr.filter((r) => !r.is_admin);
         const adminExcluded = vr.length - rows.length;
@@ -114,12 +121,12 @@ export async function GET(req) {
     let meetCounts = {};
     let meetingsTableMissing = false;
     {
-      const { data: mr, error: me } = await client.from("meetings").select("*").order("met_on", { ascending: false }).order("id", { ascending: false }).limit(100);
+      // ★ v57 최적화: 만남 1회 조회로 최근목록+횟수 동시 계산
+      const { data: mr, error: me } = await client.from("meetings").select("id,sub_id,met_on,note").order("met_on", { ascending: false }).order("id", { ascending: false }).limit(1000);
       if (me) meetingsTableMissing = true;
       else {
-        meetings = mr || [];
-        const { data: allm } = await client.from("meetings").select("sub_id");
-        (allm || []).forEach((r) => { meetCounts[r.sub_id] = (meetCounts[r.sub_id] || 0) + 1; });
+        (mr || []).forEach((r) => { meetCounts[r.sub_id] = (meetCounts[r.sub_id] || 0) + 1; });
+        meetings = (mr || []).slice(0, 100);
       }
     }
     const total = vTotal;
@@ -279,10 +286,11 @@ export async function POST(req) {
       });
       const r = await sendSMS(messages, "", scheduledDate ? { scheduledDate } : {});
       if (r.skipped) return NextResponse.json({ error: "no_sms" });
+      const manual = Array.isArray(b.ids) && b.ids.length;
       await logSms(client, {
-        kind: Array.isArray(b.ids) && b.ids.length ? "followup" : "broadcast",
+        kind: manual ? (b.src === "broadcast" ? "broadcast" : "followup") : "broadcast",
         to_count: targets.length,
-        targets: (Array.isArray(b.ids) && b.ids.length ? "후속 " : chons.slice().sort().join("·") + "촌 ") + targets.length + "명",
+        targets: (manual ? (b.src === "broadcast" ? "직접 지정 " : "후속 ") : chons.slice().sort().join("·") + "촌 ") + targets.length + "명",
         body: text,
         scheduled_at: b.at || null,
         ok: !!r.ok,
@@ -337,10 +345,17 @@ export async function POST(req) {
     let sms = null;
     if (before && !isApproved(before.approved) && patch.approved === true) {
       const dg = String(before.phone || "").replace(/\D/g, "");
-      sms = await sendSMS(
-        dg,
-        `[전성훈 상태창] ${before.name}님, 구독 등록이 완료됐습니다! 앞으로 사업·네트워킹 소식을 보내드릴게요.\n\n사이트방문:\n${SITE}\n\n구독 취소:\n${SITE}/bye?p=${dg}&t=${unsubToken(dg)}`
-      );
+      // ★ v57: 환영 문자 멘트를 어드민 설정에서 읽음 (단체문자 카드에서 수정 가능)
+      let wt = mergeConfig(null).welcomeSms;
+      try {
+        const cRow = await readLatestConfig(client);
+        const merged = mergeConfig(cRow?.data);
+        if (merged.welcomeSms && merged.welcomeSms.trim()) wt = merged.welcomeSms;
+      } catch (e) {}
+      let wmsg = wt.replace(/\[이름\]/g, before.name || "구독자");
+      if (!wmsg.includes("sunghoon-nine.vercel.app")) wmsg += "\n\n사이트방문:\n" + SITE;
+      wmsg += "\n\n구독 취소:\n" + SITE + "/bye?p=" + dg + "&t=" + unsubToken(dg);
+      sms = await sendSMS(dg, wmsg);
       if (!sms.skipped) await logSms(client, { kind: "welcome", to_count: 1, targets: (before.name || "") + " …" + dg.slice(-4), body: "환영 문자 (등록 완료 안내)", ok: !!sms.ok, detail: smsDetail(sms) });
     }
     return NextResponse.json({ ok: true, smsSent: sms ? !sms.skipped : false, row: after ? { id: after.id, chon: parseInt(after.chon, 10) || 4, approved: isApproved(after.approved), name: after.name || "", job: after.job || "", intro: after.intro || "" } : null });

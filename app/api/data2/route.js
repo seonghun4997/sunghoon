@@ -18,7 +18,7 @@ export async function GET() {
     const client = sb();
     const [cfgRow, { data: rows }, { data: notes }] = await Promise.all([
       readLatestConfig(client),
-      client.from("subscribers").select("*"),
+      client.from("subscribers").select("created_at,approved,job,intro,chon,icon,cat"), // ★ v57: 필요한 컬럼만
       client.from("patchnotes").select("id,created_at,version,content").neq("version", "__config__").order("created_at", { ascending: false }).limit(10),
     ]);
     const all = rows || [];

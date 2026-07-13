@@ -159,7 +159,7 @@ export default function Home() {
       }
     } catch (e) {}
     const onVisible = () => { if (document.visibilityState === "visible") loadData(); };
-    const timer = setInterval(loadData, 10000); // 10초마다 자동 갱신 (실시간 연동)
+    const timer = setInterval(() => { if (document.visibilityState === "visible") loadData(); }, 10000); // ★ v57: 탭이 보일 때만 10초 갱신
     window.addEventListener("focus", onVisible);
     document.addEventListener("visibilitychange", onVisible);
     return () => {

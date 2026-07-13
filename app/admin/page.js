@@ -100,8 +100,8 @@ export default function Admin() {
   useEffect(() => {
     if (!authed) return;
     pollLive();
-    const t = setInterval(pollLive, 10000);
-    const t2 = setInterval(() => load(), 15000); // ★ 구독자·지표도 15초마다 자동 갱신 (새 구독자 실시간 표시)
+    const t = setInterval(() => { if (document.visibilityState === "visible") pollLive(); }, 10000); // ★ v57: 탭이 보일 때만
+    const t2 = setInterval(() => { if (document.visibilityState === "visible") load(); }, 15000); // ★ v57: 탭이 보일 때만
     // ★ 낡은 탭 방지: 탭으로 돌아왔을 때 수정 중이 아니면 자동으로 최신값을 다시 불러옴
     const onVis = () => {
       if (document.visibilityState === "visible") {
@@ -262,6 +262,8 @@ export default function Admin() {
   const [subFilter, setSubFilter] = useState("all"); // all | 1~4 | pending
   const [bcChons, setBcChons] = useState([1, 2, 3, 4]); // 단체문자 대상 촌
   const [bcAt, setBcAt] = useState(""); // ★ v48 예약 발송 시각 ("" = 즉시 발송)
+  const [bcExclude, setBcExclude] = useState([]); // ★ v57: 단체문자에서 뺄 사람 id
+  const [bcExtra, setBcExtra] = useState([]);     // ★ v57: 단체문자에 추가할 사람 id (촌수 밖·대기 포함)
   const [testTo, setTestTo] = useState("");
   const [testMsg, setTestMsg] = useState("");
   const [testBusy, setTestBusy] = useState(false);
@@ -283,7 +285,13 @@ export default function Admin() {
     else setSubMsg("err:삭제 실패 — 잠시 후 다시 시도해주세요");
   }
 
-  const bcTargets = (data?.subscribers || []).filter((s) => s.approved && bcChons.includes(parseInt(s.chon, 10) || 4));
+  // ★ v57: 촌수 기준 + 개별 제외/추가 반영한 최종 대상
+  const bcBase = (data?.subscribers || []).filter((s) => s.approved && bcChons.includes(parseInt(s.chon, 10) || 4));
+  const bcTargets = [
+    ...bcBase.filter((s) => !bcExclude.includes(s.id)),
+    ...(data?.subscribers || []).filter((s) => bcExtra.includes(s.id) && !bcBase.some((b2) => b2.id === s.id)),
+  ];
+  const bcManual = bcExclude.length > 0 || bcExtra.length > 0;
 
   // ★ v48: 예약 시각 표시용 (예: "7/14(화) 오전 9:00")
   const fmtAt = (v) => {
@@ -308,13 +316,17 @@ export default function Admin() {
     if (!confirm(`${head}\n[이름]은 각자의 이름으로 바뀌고, 사이트 링크·구독취소 링크가 자동으로 붙습니다. 진행할까요?`)) return;
     setBcMsg(bcAt ? "예약 등록중..." : "발송중...");
     let r;
-    try { r = await post({ action: "broadcast", text: bcText.trim(), chons: bcChons, at: bcAt || undefined }); }
+    try {
+      r = bcManual
+        ? await post({ action: "broadcast", text: bcText.trim(), ids: bcTargets.map((t) => t.id), src: "broadcast", at: bcAt || undefined })
+        : await post({ action: "broadcast", text: bcText.trim(), chons: bcChons, at: bcAt || undefined });
+    }
     catch (e) { setBcMsg("❌ 네트워크 오류 — 인터넷 연결을 확인해주세요."); return; }
     if (r.error === "no_sms") setBcMsg("❌ Solapi 환경변수(SOLAPI_API_KEY 등)가 아직 설정되지 않았습니다.");
     else if (r.error === "no_target") setBcMsg("❌ 승인된 구독자가 없습니다.");
     else if (r.error === "bad_time") setBcMsg("❌ 예약 시각이 올바르지 않습니다 — 지금부터 1분 이후로 지정해주세요.");
-    else if (r.ok && r.scheduled) { setBcMsg(`⏰ ${r.count}명 예약 완료 — ${fmtAt(r.scheduled)}에 발송됩니다. (취소: solapi.com → 문자 → 예약 목록)`); setBcText(""); setBcAt(""); }
-    else if (r.ok) { setBcMsg(`✓ ${r.count}명에게 발송 완료`); setBcText(""); }
+    else if (r.ok && r.scheduled) { setBcMsg(`⏰ ${r.count}명 예약 완료 — ${fmtAt(r.scheduled)}에 발송됩니다. (취소: solapi.com → 문자 → 예약 목록)`); setBcText(""); setBcAt(""); setBcExclude([]); setBcExtra([]); }
+    else if (r.ok) { setBcMsg(`✓ ${r.count}명에게 발송 완료`); setBcText(""); setBcExclude([]); setBcExtra([]); }
     else setBcMsg("❌ 발송 실패 — " + (r.detail || "잠시 후 다시 시도해주세요.") + (r.raw ? " · 응답: " + r.raw : ""));
   }
 
@@ -1320,6 +1332,22 @@ alter table meetings enable row level security;`}</pre>
               ))}
               <b style={{ color: "var(--gold)", fontSize: 13 }}>→ 총 {bcTargets.length}명</b>
             </div>
+            {/* ★ v57: 보내기 전 개별 제외/추가 */}
+            <div className="ed-row" style={{ flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+              {bcTargets.map((t) => (
+                <button key={t.id} className="sm" title="눌러서 이번 발송에서 제외"
+                  onClick={() => bcExtra.includes(t.id) ? setBcExtra(bcExtra.filter((v) => v !== t.id)) : setBcExclude([...bcExclude, t.id])}>
+                  {t.icon || "🙋"} {t.name} ✕
+                </button>
+              ))}
+              <select value="" onChange={(e) => { const id = parseInt(e.target.value, 10); if (!id) return; setBcExclude(bcExclude.filter((v) => v !== id)); if (!bcBase.some((x) => x.id === id) && !bcExtra.includes(id)) setBcExtra([...bcExtra, id]); }}>
+                <option value="">+ 사람 추가</option>
+                {(data.subscribers || []).filter((x) => !bcTargets.some((t) => t.id === x.id)).map((x) => (
+                  <option key={x.id} value={x.id}>{x.name} ({x.job || ""}){x.approved ? "" : " · 대기중"}</option>
+                ))}
+              </select>
+              {bcManual && <button className="sm ghost" onClick={() => { setBcExclude([]); setBcExtra([]); }}>↺ 조정 초기화</button>}
+            </div>
             <textarea rows={3} value={bcText} maxLength={1000} style={{ resize: "vertical" }}
               placeholder="예: [전성훈 상태창] [이름]님, AI 사주 플랫폼이 오픈했어요!  ← [이름]은 각자 이름으로 자동 변환"
               onChange={(e) => setBcText(e.target.value)} />
@@ -1347,6 +1375,21 @@ alter table meetings enable row level security;`}</pre>
               <span className="adm-msg" style={{ padding: 0 }}>{bcMsg}</span>
               <button className="sm" disabled={!bcText.trim() || bcTargets.length === 0} onClick={broadcast}>{bcAt ? "예약 발송" : "발송"}</button>
             </div>
+            {/* ★ v57: 승인 시 자동 발송되는 환영 문자 — 여기서 수정, 자동 저장 */}
+            <details style={{ marginTop: 14 }}>
+              <summary style={{ cursor: "pointer", fontSize: 13, color: "var(--gold)" }}>🤖 자동 환영 문자 수정 — 구독 승인할 때 자동으로 나가는 멘트</summary>
+              <textarea rows={3} maxLength={500} style={{ resize: "vertical", marginTop: 8 }}
+                value={cfg?.welcomeSms || ""}
+                onChange={(e) => updateCfg({ ...cfg, welcomeSms: e.target.value })} />
+              {(cfg?.welcomeSms || "").includes("[이름]") && (
+                <div className="adm-msg" style={{ padding: "6px 0 0", textAlign: "left" }}>
+                  미리보기: "{(cfg?.welcomeSms || "").replace(/\[이름\]/g, "김도은")}"
+                </div>
+              )}
+              <div className="adm-msg" style={{ padding: "6px 0 0", textAlign: "left", opacity: 0.7 }}>
+                [이름]은 승인되는 사람 이름으로 바뀌고, "사이트방문:" / "구독 취소:" 링크가 자동으로 붙습니다. 수정하면 1.5초 뒤 자동 저장됩니다.
+              </div>
+            </details>
           </div>
 
           {/* ★ v49 문자 발송 내역 */}
