@@ -11,9 +11,31 @@ function authed(key) {
   return key && key === process.env.ADMIN_KEY;
 }
 
+// ★ v49: 문자 발송 내역 기록. 테이블이 아직 없거나 실패해도 발송 자체를 막지 않음(조용히 무시).
+async function logSms(client, entry) {
+  try { await client.from("sms_log").insert(entry); } catch (e) {}
+}
+
+// ★ v49: 솔라피 응답에서 사람이 읽을 요약 뽑기
+function smsDetail(r) {
+  if (!r) return "";
+  if (r.skipped) return "환경변수 없음";
+  try {
+    const g = r.data?.groupInfo?.count || {};
+    let d = "등록 " + (g.total ?? "?") + "건";
+    const failed = r.data?.failedMessageList || [];
+    if (failed.length) d += " · 실패: " + (failed[0].statusMessage || failed[0].statusCode || "원인미상");
+    if (!r.ok && !failed.length) d += " · " + JSON.stringify(r.data || r.error || "").slice(0, 200);
+    return d;
+  } catch (e) { return r.ok ? "성공" : "실패"; }
+}
+
 export async function GET(req) {
-  const key = new URL(req.url).searchParams.get("key");
+  const url = new URL(req.url);
+  const key = url.searchParams.get("key");
   if (!authed(key)) return NextResponse.json({ error: "denied" }, { status: 401 });
+  // ★ v50: 평균 체류시간 계산 상한(초) — 한 사람이 오래 봐도 통계가 안 튀게. 어드민에서 조절.
+  const cap = Math.max(10, Math.min(3600, parseInt(url.searchParams.get("cap"), 10) || 180));
   try {
     const client = sb();
     const dayStart = kstDayStart();
@@ -27,12 +49,72 @@ export async function GET(req) {
       readLatestConfig(client),
     ]);
     const list = (subs.data || []).map((s) => ({ ...s, approved: isApproved(s.approved) }));
-    const total = vt.count || 0;
-    const qr = vqr.count || 0;
-    const share = vshare.count || 0;
+    // ★ v50 마케팅 지표: 방문 행을 직접 읽어 어드민 제외/재방문율/체류시간/구독자별 관심도 계산.
+    //    새 컬럼 SQL 미실행이면 조용히 기존(총계) 방식만 유지.
+    let marketing = { enabled: false, cap };
+    let vTotal = vt.count || 0, vToday = vd.count || 0, vQr = vqr.count || 0, vShare = vshare.count || 0;
+    {
+      const { data: vr, error: ve } = await client
+        .from("visits")
+        .select("vid,phone,dur,created_at,src,is_admin")
+        .order("created_at", { ascending: false })
+        .limit(5000);
+      if (!ve && vr) {
+        const rows = vr.filter((r) => !r.is_admin);
+        const adminExcluded = vr.length - rows.length;
+        vTotal = rows.length;
+        vToday = rows.filter((r) => r.created_at >= dayStart).length;
+        vQr = rows.filter((r) => r.src === "qr").length;
+        vShare = rows.filter((r) => r.src === "share").length;
+        // 재방문율: 방문자ID(vid)가 2회 이상 기록된 기기 비율
+        const byVid = {};
+        rows.forEach((r) => { if (r.vid) byVid[r.vid] = (byVid[r.vid] || 0) + 1; });
+        const uniq = Object.keys(byVid).length;
+        const returning = Object.values(byVid).filter((n) => n >= 2).length;
+        // 평균 체류: 각 방문의 dur를 상한(cap)으로 자른 뒤 평균
+        const durs = rows.map((r) => r.dur).filter((d) => d > 0).map((d) => Math.min(d, cap));
+        const avgDwell = durs.length ? Math.round(durs.reduce((a, b) => a + b, 0) / durs.length) : 0;
+        // 구독자별 관심도: 인증(phone)된 방문을 구독자에 연결
+        const byPhone = {};
+        rows.forEach((r) => {
+          if (!r.phone) return;
+          const p = byPhone[r.phone] || (byPhone[r.phone] = { visits: 0, dur: 0, last: null });
+          p.visits += 1;
+          if (r.dur > 0) p.dur += Math.min(r.dur, cap);
+          if (!p.last || r.created_at > p.last) p.last = r.created_at;
+        });
+        const engagement = list
+          .filter((s) => s.approved && byPhone[s.phone_digits])
+          .map((s) => {
+            const p = byPhone[s.phone_digits];
+            return { id: s.id, name: s.name, chon: parseInt(s.chon, 10) || 4, visits: p.visits, totalDur: p.dur, avgDur: Math.round(p.dur / Math.max(1, p.visits)), lastAt: p.last };
+          })
+          .sort((a, b) => (b.visits * 60 + b.totalDur) - (a.visits * 60 + a.totalDur));
+        marketing = {
+          enabled: true, cap,
+          uniqueVisitors: uniq,
+          returningRate: uniq ? Math.round((returning / uniq) * 1000) / 10 : 0,
+          returningCount: returning,
+          avgDwell, dwellSamples: durs.length,
+          adminExcluded,
+          engagement,
+        };
+      }
+    }
+    // ★ v49: 문자 발송 내역 (최근 30건). 테이블이 아직 없으면 안내 플래그만.
+    let smsLogs = [];
+    let smsLogTableMissing = false;
+    {
+      const { data: lg, error: lgErr } = await client.from("sms_log").select("*").order("created_at", { ascending: false }).limit(30);
+      if (lgErr) smsLogTableMissing = true;
+      else smsLogs = lg || [];
+    }
+    const total = vTotal;
+    const qr = vQr;
+    const share = vShare;
     return NextResponse.json({
       visitsTotal: total,
-      visitsToday: vd.count || 0,
+      visitsToday: vToday,
       srcQr: qr,
       srcShare: share,
       srcDirect: Math.max(0, total - qr - share),
@@ -48,6 +130,9 @@ export async function GET(req) {
       configVia: cfgRow?.via || null,
       configReadError: cfgRow?.readError || null,
       smsReady: !!(process.env.SOLAPI_API_KEY && process.env.SOLAPI_API_SECRET && process.env.SOLAPI_SENDER),
+      smsLogs: smsLogs || [],
+      smsLogTableMissing,
+      marketing,
     });
   } catch (e) {
     return NextResponse.json({ error: "server" }, { status: 500 });
@@ -106,6 +191,7 @@ export async function POST(req) {
         const failed = (r.data?.failedMessageList || []);
         if (failed.length) detail += " · 실패: " + (failed[0].statusMessage || failed[0].statusCode || "원인미상");
       } catch (e) {}
+      await logSms(client, { kind: "test", to_count: 1, targets: "…" + to.slice(-4), body: String(b.text || "[전성훈 상태창] 문자 연동 테스트입니다."), ok: !!r.ok, detail: smsDetail(r) });
       return NextResponse.json({ ok: !!r.ok, detail, raw: r.ok ? undefined : JSON.stringify(r.data || r.error || "").slice(0, 300) });
     }
 
@@ -135,12 +221,22 @@ export async function POST(req) {
       }
       const messages = targets.map((t) => {
         let msg = text.replace(/\[이름\]/g, t.name || "구독자");
-        if (!msg.includes("sunghoon-nine.vercel.app")) msg += "\n" + SITE;
-        msg += "\n구독취소: " + SITE + "/bye?p=" + t.phone_digits + "&t=" + unsubToken(t.phone_digits);
+        // ★ v50: 링크를 라벨과 함께 명확히 분리해서 첨부
+        if (!msg.includes("sunghoon-nine.vercel.app")) msg += "\n\n사이트방문:\n" + SITE;
+        msg += "\n\n구독 취소:\n" + SITE + "/bye?p=" + t.phone_digits + "&t=" + unsubToken(t.phone_digits);
         return { to: t.phone_digits, text: msg };
       });
       const r = await sendSMS(messages, "", scheduledDate ? { scheduledDate } : {});
       if (r.skipped) return NextResponse.json({ error: "no_sms" });
+      await logSms(client, {
+        kind: "broadcast",
+        to_count: targets.length,
+        targets: chons.slice().sort().join("·") + "촌 " + targets.length + "명",
+        body: text,
+        scheduled_at: b.at || null,
+        ok: !!r.ok,
+        detail: smsDetail(r),
+      });
       if (!r.ok) {
         let detail = "";
         try {
@@ -177,8 +273,9 @@ export async function POST(req) {
       const dg = String(before.phone || "").replace(/\D/g, "");
       sms = await sendSMS(
         dg,
-        `[전성훈 상태창] ${before.name}님, 4촌 등록이 완료됐습니다! 앞으로 사업·인맥 소식을 보내드릴게요.\n${SITE}\n구독취소: ${SITE}/bye?p=${dg}&t=${unsubToken(dg)}`
+        `[전성훈 상태창] ${before.name}님, 4촌 등록이 완료됐습니다! 앞으로 사업·인맥 소식을 보내드릴게요.\n\n사이트방문:\n${SITE}\n\n구독 취소:\n${SITE}/bye?p=${dg}&t=${unsubToken(dg)}`
       );
+      if (!sms.skipped) await logSms(client, { kind: "welcome", to_count: 1, targets: (before.name || "") + " …" + dg.slice(-4), body: "환영 문자 (등록 완료 안내)", ok: !!sms.ok, detail: smsDetail(sms) });
     }
     return NextResponse.json({ ok: true, smsSent: sms ? !sms.skipped : false, row: after ? { id: after.id, chon: parseInt(after.chon, 10) || 4, approved: isApproved(after.approved), name: after.name || "", job: after.job || "", intro: after.intro || "" } : null });
   } catch (e) {

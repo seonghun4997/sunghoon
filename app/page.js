@@ -85,18 +85,46 @@ export default function Home() {
     } catch (e) {}
 
     const src = new URLSearchParams(location.search).get("src");
+    // ★ v50 마케팅 지표: 익명 방문자ID(재방문 판별) + 어드민 기기 제외 + 체류시간(초)
+    let vid = null;
+    try {
+      vid = localStorage.getItem("visitor_id");
+      if (!vid) { vid = Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); localStorage.setItem("visitor_id", vid); }
+    } catch (e) {}
+    let isAdminDevice = false;
+    try { isAdminDevice = localStorage.getItem("admin_device") === "1"; } catch (e) {}
+    let savedPhone0 = null;
+    try { savedPhone0 = localStorage.getItem("viewer_phone") || null; } catch (e) {}
+    const startedAt = Date.now();
+    const durBase = (() => { try { return parseInt(sessionStorage.getItem("dur_base"), 10) || 0; } catch (e) { return 0; } })();
+    const sendDur = () => {
+      try {
+        const id = sessionStorage.getItem("visit_id");
+        if (!id) return;
+        const dur = durBase + Math.round((Date.now() - startedAt) / 1000);
+        if (dur < 3) return;
+        sessionStorage.setItem("dur_base", String(dur));
+        const payload = JSON.stringify({ upd: id, dur });
+        if (navigator.sendBeacon) navigator.sendBeacon("/api/visit", new Blob([payload], { type: "application/json" }));
+        else fetch("/api/visit", { method: "POST", headers: { "Content-Type": "application/json" }, body: payload, keepalive: true }).catch(() => {});
+      } catch (e) {}
+    };
     const ping = () =>
       fetch("/api/visit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ src }),
-      }).catch(() => {});
+        body: JSON.stringify({ src, vid, phone: savedPhone0, admin: isAdminDevice }),
+      }).then((r) => r.json()).then((d) => { try { if (d && d.id) sessionStorage.setItem("visit_id", String(d.id)); } catch (e) {} }).catch(() => {});
     try {
       if (!sessionStorage.getItem("visited")) {
         sessionStorage.setItem("visited", "1");
         ping();
       }
     } catch (e) { ping(); }
+    // 체류시간: 화면이 보이는 동안 15초마다 + 탭을 떠날 때 갱신
+    const durTimer = setInterval(() => { if (document.visibilityState === "visible") sendDur(); }, 15000);
+    document.addEventListener("visibilitychange", sendDur);
+    window.addEventListener("pagehide", sendDur);
 
     // ★ 최신 데이터 불러오기 — 새 통로(/api/data2)만 사용 (과거 캐시 오염 원천 차단)
     //   처음 1회 + 탭으로 돌아올 때 + 30초마다 자동 갱신
@@ -129,8 +157,11 @@ export default function Home() {
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       clearInterval(timer);
+      clearInterval(durTimer);
       window.removeEventListener("focus", onVisible);
       document.removeEventListener("visibilitychange", onVisible);
+      document.removeEventListener("visibilitychange", sendDur);
+      window.removeEventListener("pagehide", sendDur);
     };
   }, []);
 
@@ -150,6 +181,11 @@ export default function Home() {
       if (d.ok) {
         setViewer({ chon: d.chon, name: d.name });
         try { localStorage.setItem("viewer_phone", uPhone); } catch (e) {}
+        // ★ v50: 이번 방문 기록에 인증 번호 연결 → 어드민 "구독자 관심도"에 집계
+        try {
+          const vidRow = sessionStorage.getItem("visit_id");
+          if (vidRow) fetch("/api/visit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ upd: vidRow, phone: uPhone }) }).catch(() => {});
+        } catch (e) {}
         setUnlock(false); setUPhone("");
         toast("🔓 " + d.chon + "촌 등급으로 열렸습니다");
       } else {

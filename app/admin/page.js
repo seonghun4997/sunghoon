@@ -119,13 +119,19 @@ export default function Admin() {
     };
   }, [authed]);
 
+  // ★ v50: 평균 체류시간 계산 상한(초) — 한 명이 오래 켜놔도 평균이 안 튀게. 조절 가능.
+  const [mktCap, setMktCap] = useState(180);
+  const mktCapRef = useRef(180);
+
   async function load(k = key, clearEdits = false) {
     try {
-      const r = await fetch("/api/admin?key=" + encodeURIComponent(k));
+      const r = await fetch("/api/admin?key=" + encodeURIComponent(k) + "&cap=" + (mktCapRef.current || 180));
       if (!r.ok) return false;
       const d = await r.json();
       if (d.error) return false;
       setData(d);
+      // ★ v50: 이 기기를 '어드민 기기'로 표시 → 내 방문은 통계에서 자동 제외
+      try { localStorage.setItem("admin_device", "1"); } catch (e) {}
       if (clearEdits) setEdits({}); // ★ v39: 자동 폴링은 편집 중인 선택(촌수/승인)을 절대 지우지 않음
       if (d.config && !dirtyRef.current) {
         cfgRef.current = mergeConfig(d.config);
@@ -521,9 +527,73 @@ export default function Admin() {
                   <span className="chip t1">1촌 {dist[1]}</span> <span className="chip t2">2촌 {dist[2]}</span> <span className="chip t3">3촌 {dist[3]}</span> <span className="chip t4">4촌 {dist[4]}</span>
                 </div>
               </div>
+              {/* ★ v50 마케팅 지표 */}
+              {data.marketing?.enabled && (
+                <>
+                  <div className="mcard">
+                    <div className="k">순 방문자 (기기)</div>
+                    <div className="v">{data.marketing.uniqueVisitors}</div>
+                    <div className="s">어드민 방문 {data.marketing.adminExcluded}건 제외됨</div>
+                  </div>
+                  <div className="mcard hl">
+                    <div className="k">재방문율</div>
+                    <div className="v">{data.marketing.returningRate}%</div>
+                    <div className="s">2회 이상 방문 기기 {data.marketing.returningCount}개</div>
+                  </div>
+                  <div className="mcard" style={{ gridColumn: "1 / -1" }}>
+                    <div className="k">평균 체류시간</div>
+                    <div className="v">{data.marketing.avgDwell >= 60 ? Math.floor(data.marketing.avgDwell / 60) + "분 " + (data.marketing.avgDwell % 60) + "초" : data.marketing.avgDwell + "초"}</div>
+                    <div className="s" style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginTop: 4 }}>
+                      표본 {data.marketing.dwellSamples}건 · 1회 상한
+                      <input type="number" min={10} max={3600} value={mktCap} style={{ width: 70, padding: "4px 6px" }}
+                        onChange={(e) => { const v = parseInt(e.target.value, 10) || 180; setMktCap(v); mktCapRef.current = v; }} />
+                      초 <button className="sm ghost" onClick={() => load(key)}>적용</button>
+                      <span style={{ opacity: 0.7 }}>← 한 명이 오래 켜놔도 이 값 이상은 안 세요</span>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
+            {data.marketing && !data.marketing.enabled && (
+              <div className="adm-msg" style={{ textAlign: "left", color: "#ff9f43", paddingBottom: 0 }}>
+                ⚠️ 재방문율·체류시간·관심도를 켜려면 Supabase → SQL Editor에서 1회 실행 (zip의 supabase/방문지표_컬럼추가.sql):
+                <pre style={{ whiteSpace: "pre-wrap", fontSize: 11, background: "rgba(255,255,255,.06)", padding: 8, borderRadius: 6, marginTop: 6 }}>{`alter table visits add column if not exists vid text;
+alter table visits add column if not exists phone text;
+alter table visits add column if not exists dur int;
+alter table visits add column if not exists is_admin boolean default false;`}</pre>
+              </div>
+            )}
             <div className="adm-msg" style={{ paddingBottom: 0 }}>{tip}</div>
           </div>
+
+          {/* ★ v50 구독자 관심도 */}
+          {data.marketing?.enabled && (
+            <div className="card">
+              <div className="sechead"><h2>구독자 관심도</h2><span className="en">ENGAGEMENT</span></div>
+              {(data.marketing.engagement || []).length === 0 ? (
+                <div className="adm-msg" style={{ textAlign: "left", padding: 0 }}>
+                  아직 데이터가 없습니다. 구독자가 사이트에서 <b>번호 인증</b>을 하면 그 사람의 방문 횟수·체류시간이 여기에 쌓입니다. (v50 배포 이후 방문부터 집계)
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {(data.marketing.engagement || []).map((e, i) => (
+                    <div key={e.id} style={{ border: "1px solid rgba(255,255,255,.12)", borderRadius: 8, padding: "8px 10px", fontSize: 13, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                      <b style={{ color: "var(--gold)", minWidth: 22 }}>{i + 1}위</b>
+                      <b>{e.name}</b>
+                      <span className={"chip t" + e.chon}>{e.chon}촌</span>
+                      <span>방문 <b>{e.visits}</b>회</span>
+                      <span>총 체류 <b>{e.totalDur >= 60 ? Math.floor(e.totalDur / 60) + "분" : e.totalDur + "초"}</b></span>
+                      <span>평균 <b>{e.avgDur}</b>초</span>
+                      <span className="time" style={{ opacity: 0.7 }}>마지막 {fmtKST(e.lastAt)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="adm-msg" style={{ padding: "8px 0 0", textAlign: "left", opacity: 0.7 }}>
+                번호 인증을 한 구독자만 잡힙니다 (미인증 방문은 익명이라 누군지 알 수 없음). 순위 = 방문 횟수 + 체류시간 종합.
+              </div>
+            </div>
+          )}
 
           {/* 구독자 관리 */}
           <div className="card">
@@ -988,7 +1058,7 @@ export default function Admin() {
               </div>
             )}
             <div className="adm-msg" style={{ padding: "6px 0 0", textAlign: "left", opacity: 0.75 }}>
-              모든 문자 끝에 사이트 링크와 구독취소 링크가 자동으로 붙습니다.
+              모든 문자 끝에 "사이트방문:" / "구독 취소:" 링크가 각각 줄을 나눠 자동으로 붙습니다.
             </div>
             {/* ★ v48 예약 발송 */}
             <div className="ed-row" style={{ flexWrap: "wrap", gap: 6, marginTop: 10, alignItems: "center" }}>
@@ -1005,6 +1075,45 @@ export default function Admin() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
               <span className="adm-msg" style={{ padding: 0 }}>{bcMsg}</span>
               <button className="sm" disabled={!bcText.trim() || bcTargets.length === 0} onClick={broadcast}>{bcAt ? "예약 발송" : "발송"}</button>
+            </div>
+          </div>
+
+          {/* ★ v49 문자 발송 내역 */}
+          <div className="card">
+            <div className="sechead"><h2>문자 발송 내역</h2><span className="en">SMS LOG</span></div>
+            {data.smsLogTableMissing ? (
+              <div className="adm-msg" style={{ padding: "0 0 8px", textAlign: "left", color: "#ff9f43" }}>
+                ⚠️ 내역 테이블이 아직 없습니다. Supabase → SQL Editor에서 아래 한 번만 실행해주세요 (zip의 supabase/문자내역_테이블.sql과 동일):
+                <pre style={{ whiteSpace: "pre-wrap", fontSize: 11, background: "rgba(255,255,255,.06)", padding: 8, borderRadius: 6, marginTop: 6 }}>{`create table if not exists sms_log (
+  id bigint generated always as identity primary key,
+  created_at timestamptz not null default now(),
+  kind text not null, to_count int not null default 0,
+  targets text, body text, scheduled_at text,
+  ok boolean not null default false, detail text
+);
+alter table sms_log enable row level security;`}</pre>
+              </div>
+            ) : (data.smsLogs || []).length === 0 ? (
+              <div className="adm-msg" style={{ padding: "0 0 8px", textAlign: "left" }}>아직 발송 내역이 없습니다. (테이블 생성 이후의 발송부터 기록됩니다)</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {(data.smsLogs || []).map((l) => (
+                  <div key={l.id} style={{ border: "1px solid rgba(255,255,255,.12)", borderRadius: 8, padding: "8px 10px", fontSize: 13, lineHeight: 1.5 }}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                      <b style={{ color: l.ok ? "#2ecc71" : "#ff6b6b" }}>{l.ok ? "✓ 성공" : "❌ 실패"}</b>
+                      <span style={{ color: "var(--gold)" }}>{l.kind === "broadcast" ? "단체" : l.kind === "welcome" ? "환영" : "테스트"}</span>
+                      <span>{l.targets || ""}</span>
+                      {l.scheduled_at && <span>⏰ 예약 {l.scheduled_at.replace("T", " ")}</span>}
+                      <span className="time" style={{ opacity: 0.7 }}>{fmtKST(l.created_at)}</span>
+                    </div>
+                    {l.body && <div style={{ opacity: 0.85, marginTop: 3, whiteSpace: "pre-wrap", wordBreak: "keep-all" }}>{String(l.body).slice(0, 120)}{String(l.body).length > 120 ? "…" : ""}</div>}
+                    {l.detail && <div style={{ opacity: 0.7, marginTop: 2, fontSize: 12 }}>{l.detail}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="adm-msg" style={{ padding: "8px 0 0", textAlign: "left", opacity: 0.7 }}>
+              최근 30건 · 어드민에서 보낸 테스트/단체/환영 문자가 기록됩니다. 실제 수신 성공 여부·예약 목록은 solapi.com → 문자 메뉴에서 확인 가능합니다.
             </div>
           </div>
         </>
