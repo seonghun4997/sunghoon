@@ -208,6 +208,7 @@ export default function Admin() {
   const [subQ, setSubQ] = useState("");          // 구독자 검색어
   const [subFilter, setSubFilter] = useState("all"); // all | 1~4 | pending
   const [bcChons, setBcChons] = useState([1, 2, 3, 4]); // 단체문자 대상 촌
+  const [bcAt, setBcAt] = useState(""); // ★ v48 예약 발송 시각 ("" = 즉시 발송)
   const [testTo, setTestTo] = useState("");
   const [testMsg, setTestMsg] = useState("");
   const [testBusy, setTestBusy] = useState(false);
@@ -231,18 +232,37 @@ export default function Admin() {
 
   const bcTargets = (data?.subscribers || []).filter((s) => s.approved && bcChons.includes(parseInt(s.chon, 10) || 4));
 
+  // ★ v48: 예약 시각 표시용 (예: "7/14(화) 오전 9:00")
+  const fmtAt = (v) => {
+    if (!v) return "";
+    const d = new Date(v + ":00+09:00");
+    if (isNaN(d)) return v;
+    const days = ["일", "월", "화", "수", "목", "금", "토"];
+    const p = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit", weekday: "short", hour12: true }).format(d);
+    return p;
+  };
+
   async function broadcast() {
-    const n = (data?.subscribers || []).filter((s) => s.approved).length;
     if (!bcText.trim()) return;
-    if (!confirm(`${bcChons.sort().join("·")}촌 구독자 ${bcTargets.length}명에게 발송합니다.\n[이름]은 각자의 이름으로 바뀌고, 사이트 링크·구독취소 링크가 자동으로 붙습니다. 진행할까요?`)) return;
-    setBcMsg("발송중...");
+    // ★ v48: 예약이면 현재+1분 이후인지 브라우저에서 먼저 검사
+    if (bcAt) {
+      const when = new Date(bcAt + ":00+09:00").getTime();
+      if (!when || when < Date.now() + 60 * 1000) { setBcMsg("❌ 예약 시각은 지금부터 1분 이후여야 합니다."); return; }
+    }
+    const head = bcAt
+      ? `⏰ ${fmtAt(bcAt)}에 ${bcChons.sort().join("·")}촌 구독자 ${bcTargets.length}명에게 예약 발송합니다.`
+      : `${bcChons.sort().join("·")}촌 구독자 ${bcTargets.length}명에게 지금 바로 발송합니다.`;
+    if (!confirm(`${head}\n[이름]은 각자의 이름으로 바뀌고, 사이트 링크·구독취소 링크가 자동으로 붙습니다. 진행할까요?`)) return;
+    setBcMsg(bcAt ? "예약 등록중..." : "발송중...");
     let r;
-    try { r = await post({ action: "broadcast", text: bcText.trim(), chons: bcChons }); }
+    try { r = await post({ action: "broadcast", text: bcText.trim(), chons: bcChons, at: bcAt || undefined }); }
     catch (e) { setBcMsg("❌ 네트워크 오류 — 인터넷 연결을 확인해주세요."); return; }
     if (r.error === "no_sms") setBcMsg("❌ Solapi 환경변수(SOLAPI_API_KEY 등)가 아직 설정되지 않았습니다.");
     else if (r.error === "no_target") setBcMsg("❌ 승인된 구독자가 없습니다.");
+    else if (r.error === "bad_time") setBcMsg("❌ 예약 시각이 올바르지 않습니다 — 지금부터 1분 이후로 지정해주세요.");
+    else if (r.ok && r.scheduled) { setBcMsg(`⏰ ${r.count}명 예약 완료 — ${fmtAt(r.scheduled)}에 발송됩니다. (취소: solapi.com → 문자 → 예약 목록)`); setBcText(""); setBcAt(""); }
     else if (r.ok) { setBcMsg(`✓ ${r.count}명에게 발송 완료`); setBcText(""); }
-    else setBcMsg("❌ 발송 실패 — 잠시 후 다시 시도해주세요.");
+    else setBcMsg("❌ 발송 실패 — " + (r.detail || "잠시 후 다시 시도해주세요.") + (r.raw ? " · 응답: " + r.raw : ""));
   }
 
   /* ── 사이트 편집기 헬퍼 ── */
@@ -970,9 +990,21 @@ export default function Admin() {
             <div className="adm-msg" style={{ padding: "6px 0 0", textAlign: "left", opacity: 0.75 }}>
               모든 문자 끝에 사이트 링크와 구독취소 링크가 자동으로 붙습니다.
             </div>
+            {/* ★ v48 예약 발송 */}
+            <div className="ed-row" style={{ flexWrap: "wrap", gap: 6, marginTop: 10, alignItems: "center" }}>
+              <span className="adm-msg" style={{ padding: 0 }}>⏰ 예약(선택):</span>
+              <input type="datetime-local" value={bcAt} min={new Date(Date.now() + 9 * 3600 * 1000 + 2 * 60 * 1000).toISOString().slice(0, 16)}
+                style={{ minWidth: 0 }} onChange={(e) => setBcAt(e.target.value)} />
+              {bcAt && <button className="sm ghost" onClick={() => setBcAt("")}>예약 해제</button>}
+            </div>
+            {bcAt && (
+              <div className="adm-msg" style={{ padding: "6px 0 0", textAlign: "left", opacity: 0.75 }}>
+                한국시간 기준으로 예약됩니다. 등록 후 취소는 solapi.com → 문자 → 예약 목록에서 가능합니다.
+              </div>
+            )}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
               <span className="adm-msg" style={{ padding: 0 }}>{bcMsg}</span>
-              <button className="sm" disabled={!bcText.trim() || bcTargets.length === 0} onClick={broadcast}>발송</button>
+              <button className="sm" disabled={!bcText.trim() || bcTargets.length === 0} onClick={broadcast}>{bcAt ? "예약 발송" : "발송"}</button>
             </div>
           </div>
         </>

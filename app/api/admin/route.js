@@ -124,15 +124,32 @@ export async function POST(req) {
       const { data } = await client.from("subscribers").select("name,phone_digits,chon,approved");
       const targets = (data || []).filter((s) => isApproved(s.approved) && chons.includes(parseInt(s.chon, 10) || 4));
       if (targets.length === 0) return NextResponse.json({ error: "no_target" });
+      // ★ v48 예약 발송: b.at = "YYYY-MM-DDTHH:mm" (한국시간). 현재+1분 이후만 허용.
+      let scheduledDate = null;
+      if (b.at) {
+        const at = String(b.at).trim();
+        if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(at)) return NextResponse.json({ error: "bad_time" });
+        scheduledDate = at + ":00+09:00"; // 한국시간으로 고정
+        const when = new Date(scheduledDate).getTime();
+        if (!when || when < Date.now() + 60 * 1000) return NextResponse.json({ error: "bad_time" });
+      }
       const messages = targets.map((t) => {
         let msg = text.replace(/\[이름\]/g, t.name || "구독자");
         if (!msg.includes("sunghoon-nine.vercel.app")) msg += "\n" + SITE;
         msg += "\n구독취소: " + SITE + "/bye?p=" + t.phone_digits + "&t=" + unsubToken(t.phone_digits);
         return { to: t.phone_digits, text: msg };
       });
-      const r = await sendSMS(messages, "");
+      const r = await sendSMS(messages, "", scheduledDate ? { scheduledDate } : {});
       if (r.skipped) return NextResponse.json({ error: "no_sms" });
-      return NextResponse.json({ ok: true, count: r.count });
+      if (!r.ok) {
+        let detail = "";
+        try {
+          const failed = (r.data?.failedMessageList || []);
+          if (failed.length) detail = failed[0].statusMessage || failed[0].statusCode || "";
+        } catch (e) {}
+        return NextResponse.json({ ok: false, detail, raw: JSON.stringify(r.data || r.error || "").slice(0, 300) });
+      }
+      return NextResponse.json({ ok: true, count: r.count, scheduled: scheduledDate ? b.at : null });
     }
 
     // 구독자 촌수/승인 수정 (기본)
