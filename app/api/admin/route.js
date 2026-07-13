@@ -262,7 +262,22 @@ export async function POST(req) {
     if (typeof b.job === "string") patch.job = b.job.trim().slice(0, 10);
     if (typeof b.intro === "string") patch.intro = b.intro.trim().slice(0, 20);
     if (typeof b.icon === "string") patch.icon = b.icon.trim().slice(0, 4);
-    const { error } = await client.from("subscribers").update(patch).eq("id", b.id);
+    // ★ v52: 생일(MM-DD)·카테고리 수동 지정
+    if (typeof b.birthday === "string") {
+      let d = b.birthday.replace(/\D/g, "");
+      if (d.length === 8) d = d.slice(4);
+      if (d.length === 3) d = "0" + d;
+      if (d.length === 4) {
+        const m = parseInt(d.slice(0, 2), 10), day = parseInt(d.slice(2), 10);
+        if (m >= 1 && m <= 12 && day >= 1 && day <= 31) patch.birthday = d.slice(0, 2) + "-" + d.slice(2);
+      } else if (d.length === 0) patch.birthday = null;
+    }
+    if (typeof b.cat === "string") patch.cat = b.cat.trim() || null;
+    let { error } = await client.from("subscribers").update(patch).eq("id", b.id);
+    if (error && ("birthday" in patch || "cat" in patch)) { // 새 컬럼 SQL 미실행 디비 폴백
+      const { birthday, cat, ...rest } = patch;
+      if (Object.keys(rest).length) ({ error } = await client.from("subscribers").update(rest).eq("id", b.id));
+    }
     if (error) return NextResponse.json({ error: "db" }, { status: 500 });
     // ★ v39: 방금 기록된 행을 다시 읽어 그대로 반환 (프론트가 대조 검증)
     const { data: after } = await client.from("subscribers").select("*").eq("id", b.id).single();
@@ -273,7 +288,7 @@ export async function POST(req) {
       const dg = String(before.phone || "").replace(/\D/g, "");
       sms = await sendSMS(
         dg,
-        `[전성훈 상태창] ${before.name}님, 4촌 등록이 완료됐습니다! 앞으로 사업·인맥 소식을 보내드릴게요.\n\n사이트방문:\n${SITE}\n\n구독 취소:\n${SITE}/bye?p=${dg}&t=${unsubToken(dg)}`
+        `[전성훈 상태창] ${before.name}님, 구독 등록이 완료됐습니다! 앞으로 사업·인맥 소식을 보내드릴게요.\n\n사이트방문:\n${SITE}\n\n구독 취소:\n${SITE}/bye?p=${dg}&t=${unsubToken(dg)}`
       );
       if (!sms.skipped) await logSms(client, { kind: "welcome", to_count: 1, targets: (before.name || "") + " …" + dg.slice(-4), body: "환영 문자 (등록 완료 안내)", ok: !!sms.ok, detail: smsDetail(sms) });
     }

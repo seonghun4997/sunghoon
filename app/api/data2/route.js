@@ -25,7 +25,7 @@ export async function GET() {
     all.sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")));
     const members = all
       .filter((r) => isApproved(r.approved))
-      .map((r) => ({ job: r.job || "", intro: r.intro || "", chon: r.chon, icon: r.icon || "🙋" }));
+      .map((r) => ({ job: r.job || "", intro: r.intro || "", chon: r.chon, icon: r.icon || "🙋", cat: r.cat || null }));
     return NextResponse.json(
       {
         build: BUILD,

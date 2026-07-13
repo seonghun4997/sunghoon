@@ -18,14 +18,14 @@ export async function POST(req) {
     if (digits.length < 10) return NextResponse.json({ ok: false }, { headers: NO_CACHE });
     const { data: row } = await sb()
       .from("subscribers")
-      .select("name,chon,approved")
+      .select("*")
       .eq("phone_digits", digits)
       .maybeSingle();
     if (!row || !isApproved(row.approved)) {
       return NextResponse.json({ ok: false }, { headers: NO_CACHE });
     }
     return NextResponse.json(
-      { ok: true, chon: parseInt(row.chon, 10) || 4, name: row.name || "" },
+      { ok: true, chon: parseInt(row.chon, 10) || 4, name: row.name || "", job: row.job || "", intro: row.intro || "", icon: row.icon || "🙋", birthday: row.birthday || "" },
       { headers: NO_CACHE }
     );
   } catch (e) {

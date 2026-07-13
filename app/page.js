@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
-import { DEFAULT_CONFIG, mergeConfig, lines, BUILD, CANONICAL_HOST } from "@/lib/config";
+import { useEffect, useState, useRef } from "react";
+import { DEFAULT_CONFIG, mergeConfig, lines, BUILD, CANONICAL_HOST, NET_CATS, autoCat } from "@/lib/config";
 
 const RANK = (v) => (v >= 9 ? "S" : v >= 7 ? "A" : v >= 5 ? "B" : v >= 3 ? "C" : "D");
 
@@ -26,9 +26,15 @@ export default function Home() {
   const [subOpen, setSubOpen] = useState(false);
   const [subDone, setSubDone] = useState(false);
   const [sending, setSending] = useState(false);
-  const [form, setForm] = useState({ name: "", phone: "", job: "", intro: "", icon: "🙋" });
+  const [form, setForm] = useState({ name: "", phone: "", job: "", intro: "", icon: "🙋", birthday: "" });
   const [toastMsg, setToastMsg] = useState("");
   const [lock, setLock] = useState(null); // {title, desc} — 구독 유도 모달
+  // ★ v51: 구독자 본인 소개 수정 모달
+  const [me, setMe] = useState(null); // {icon, job, intro} 편집값 (null = 닫힘)
+  const [meBusy, setMeBusy] = useState(false);
+  const [meMsg, setMeMsg] = useState("");
+  const loadDataRef = useRef(null);
+  const [catSel, setCatSel] = useState(null); // ★ v52: 인맥 카테고리 선택 (null = 미선택)
   const [viewer, setViewer] = useState(null); // {chon, name} — 인증된 구독자 등급 (null = 미구독 방문자)
   const [unlock, setUnlock] = useState(false); // 구독자 인증 모달
   const [uPhone, setUPhone] = useState("");
@@ -140,6 +146,7 @@ export default function Home() {
         })
         .catch(() => {});
     };
+    loadDataRef.current = loadData;
     loadData();
     // ★ v42: 이전에 인증한 번호가 있으면 자동 재인증 (승인 상태가 바뀌면 자동 반영)
     try {
@@ -147,7 +154,7 @@ export default function Home() {
       if (saved) {
         fetch("/api/whoami", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: saved }), cache: "no-store" })
           .then((r) => r.json())
-          .then((d) => { if (d.ok) setViewer({ chon: d.chon, name: d.name }); else localStorage.removeItem("viewer_phone"); })
+          .then((d) => { if (d.ok) setViewer({ chon: d.chon, name: d.name, job: d.job || "", intro: d.intro || "", icon: d.icon || "🙋", birthday: d.birthday || "", phone: saved }); else localStorage.removeItem("viewer_phone"); })
           .catch(() => {});
       }
     } catch (e) {}
@@ -173,13 +180,36 @@ export default function Home() {
   const canSubmit =
     form.name.trim() && form.phone.replace(/\D/g, "").length >= 10 && form.job.trim();
 
+  // ★ v51: 내 소개 수정
+  const openMe = () => {
+    if (!viewer) return;
+    setMeMsg("");
+    setMe({ icon: viewer.icon || "🙋", job: viewer.job || "", intro: viewer.intro || "", birthday: viewer.birthday || "" });
+  };
+  async function saveMe() {
+    if (!me || !viewer?.phone) return;
+    if (!me.job.trim()) { setMeMsg("직업(하는 일)은 비울 수 없어요."); return; }
+    setMeBusy(true); setMeMsg("");
+    try {
+      const r = await fetch("/api/myprofile", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: viewer.phone, icon: me.icon, job: me.job, intro: me.intro, birthday: me.birthday }), cache: "no-store" });
+      const d = await r.json();
+      if (d.ok) {
+        setViewer({ ...viewer, icon: d.icon, job: d.job, intro: d.intro, birthday: d.birthday || "" });
+        setMe(null);
+        toast("✏️ 내 소개가 수정됐어요!");
+        loadDataRef.current && loadDataRef.current(); // 인맥 목록 즉시 갱신
+      } else setMeMsg("저장에 실패했어요. 잠시 후 다시 시도해주세요.");
+    } catch (e) { setMeMsg("네트워크 오류 — 다시 시도해주세요."); }
+    setMeBusy(false);
+  }
+
   async function doUnlock() {
     setUBusy(true); setUMsg("");
     try {
       const r = await fetch("/api/whoami", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: uPhone }), cache: "no-store" });
       const d = await r.json();
       if (d.ok) {
-        setViewer({ chon: d.chon, name: d.name });
+        setViewer({ chon: d.chon, name: d.name, job: d.job || "", intro: d.intro || "", icon: d.icon || "🙋", birthday: d.birthday || "", phone: uPhone });
         try { localStorage.setItem("viewer_phone", uPhone); } catch (e) {}
         // ★ v50: 이번 방문 기록에 인증 번호 연결 → 어드민 "구독자 관심도"에 집계
         try {
@@ -187,7 +217,7 @@ export default function Home() {
           if (vidRow) fetch("/api/visit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ upd: vidRow, phone: uPhone }) }).catch(() => {});
         } catch (e) {}
         setUnlock(false); setUPhone("");
-        toast("🔓 " + d.chon + "촌 등급으로 열렸습니다");
+        toast("🔓 구독자 인증 완료 — 잠긴 칸이 열렸습니다");
       } else {
         setUMsg(T.unlockFail);
       }
@@ -332,6 +362,12 @@ export default function Home() {
             <span className={`rank ${RANK(s.v)}`}>{RANK(s.v)}</span>
           </div>
         ))}
+        {/* ★ v51 등급 설명 */}
+        <div className="note" style={{ marginTop: 12, lineHeight: 2.2, wordBreak: "keep-all" }}>
+          <span className="rank S" style={{ display: "inline-block", marginLeft: 0, marginRight: 2 }}>S</span>~<span className="rank A" style={{ display: "inline-block", margin: "0 6px 0 2px" }}>A</span>등급 : 자신있는 분야<br />
+          <span className="rank B" style={{ display: "inline-block", margin: "0 6px 0 0" }}>B</span>등급 : 할 줄 아는 분야<br />
+          <span className="rank C" style={{ display: "inline-block", marginLeft: 0, marginRight: 2 }}>C</span>~<span className="rank D" style={{ display: "inline-block", margin: "0 6px 0 2px" }}>D</span>등급 : 부족한 분야
+        </div>
       </section>
     ),
 
@@ -367,7 +403,7 @@ export default function Home() {
             )}
           </div>
         ))}
-        {viewer ? <div className="note">🔓 지금 {viewer.chon}촌 등급으로 보는 중{viewer.chon === 4 ? " — 상세 설명은 3촌부터" : ""} · <button className="linklike" onClick={() => { try { localStorage.removeItem("viewer_phone"); } catch (e) {} setViewer(null); }}>번호 변경</button></div> : (T.bizNote?.trim() && <div className="note">{T.bizNote}</div>)}
+        {viewer ? <div className="note">🔓 구독자로 인증됨{viewer.chon >= 4 ? " — 상세 설명은 가까운 사이(3회 이상 만남)부터" : ""} · <button className="linklike" onClick={openMe}>✏️ 내 소개 수정</button> · <button className="linklike" onClick={() => { try { localStorage.removeItem("viewer_phone"); } catch (e) {} setViewer(null); }}>번호 변경</button></div> : (T.bizNote?.trim() && <div className="note">{T.bizNote}</div>)}
       </section>
     ),
 
@@ -410,70 +446,69 @@ export default function Home() {
         {!viewer ? (
           <div className="tease">
             <div className="tease-blur" aria-hidden="true">
-              {cfg.network.filter((g) => (g.people || []).length > 0).slice(0, 2).map((g) => (
-                <div className="chon" key={g.chon}>
-                  <div className="chonhead"><span className={`n t${g.chon}`}>{g.chon}촌</span><span className="r">{g.rule}</span></div>
-                  {(g.people || []).slice(0, 3).map((pp, i) => (
-                    <div className="person" key={i}>
-                      <span className="ic">{pp.icon}</span>
-                      <div style={{ minWidth: 0 }}><div className="nm">{pp.job}</div><div className="ds">{pp.desc}</div></div>
-                    </div>
-                  ))}
+              {/* ★ v52: 카테고리 그리드 미리보기 */}
+              <div className="catgrid">
+                {NET_CATS.map((c) => (
+                  <div key={c.id} className="catbtn"><span className="ci">{c.icon}</span><span className="cn">{c.name}</span></div>
+                ))}
+              </div>
+              {cfg.network.filter((g) => g.chon <= 3).flatMap((g) => g.people || []).slice(0, 2).map((pp, i) => (
+                <div className="person" key={i}>
+                  <span className="ic">{pp.icon}</span>
+                  <div style={{ minWidth: 0 }}><div className="nm">{pp.job}</div><div className="ds">{pp.desc}</div></div>
                 </div>
               ))}
             </div>
             <div className="tease-gate"><Gate desc={T.netGateDesc} /></div>
           </div>
-        ) : cfg.network.map((g) => {
-          const chon = g.chon;
-          const rule = g.rule;
-          const dyn = membersOf(chon);
-          const all = [
-            ...(g.people || []).map((p) => [p.icon, p.job, p.desc]),
-            ...dyn.map((m) => [m.icon || "🙋", m.job, m.intro || ""]),
-          ];
-          if (chon === 4) {
-            return (
-              <div className="chon" key={chon}>
-                <div className="chonhead"><span className="n t4">4촌</span><span className="r">{rule}</span></div>
-                <button className="fold" onClick={() => setOpen4(!open4)}>
-                  🙋 구독자 {all.length}명 <span style={{ color: "var(--dim)", fontWeight: 400 }}>· {open4 ? "접기 ▲" : "눌러서 보기 ▼"}</span>
-                </button>
-                {open4 && (
-                  all.length === 0 ? (
-                    <div className="empty" style={{ marginTop: 8 }}>{T.net4Empty}</div>
-                  ) : (
-                    <div style={{ marginTop: 8 }}>
-                      {all.map(([ic, nm, ds], i) => (
-                        <div className="person" key={"4-" + i}>
-                          <span className="ic">{ic}</span>
-                          <div style={{ minWidth: 0 }}><div className="nm">{nm}</div><div className="ds">{ds}</div></div>
-                          <button className="mini-act" onClick={() => viewer.chon <= 3 ? setIntro(nm) : setLock({ title: T.lockNet3Title, desc: T.lockNet3Desc, noSub: true })}>소개받기</button>
-                        </div>
-                      ))}
-                    </div>
-                  )
-                )}
-              </div>
-            );
-          }
+        ) : (() => {
+          // ★ v52: 카테고리 3×2 그리드 — 클릭하면 해당 분야 사람들이 뜸.
+          //   사람마다 "가까운 사이"(1~3촌) / "구독자"(4촌) 배지. 내부 촌수는 노출하지 않음.
+          const people = [];
+          cfg.network.forEach((g) => {
+            const tier = g.chon <= 3 ? "close" : "sub";
+            (g.people || []).forEach((p) => people.push({ icon: p.icon, job: p.job, desc: p.desc, tier, cat: p.cat || autoCat(p.job, p.desc) }));
+            membersOf(g.chon).forEach((m) => people.push({ icon: m.icon || "🙋", job: m.job, desc: m.intro || "", tier, cat: m.cat || autoCat(m.job, m.intro) }));
+          });
+          const closeCnt = people.filter((p) => p.tier === "close").length;
+          const subCnt = people.filter((p) => p.tier === "sub").length;
+          const cnt = (id) => people.filter((p) => p.cat === id).length;
+          const shown = catSel ? people.filter((p) => p.cat === catSel) : [];
           return (
-            <div className="chon" key={chon}>
-              <div className="chonhead"><span className={`n t${chon}`}>{chon}촌</span><span className="r">{rule}</span></div>
-              {all.length === 0 ? (
+            <>
+              <div className="tierlegend">
+                <span><b className="tb close">{T.tierCloseName}</b> {closeCnt}명 · {T.tierCloseRule}</span>
+                <span><b className="tb sub">{T.tierSubName}</b> {subCnt}명 · {T.tierSubRule}</span>
+              </div>
+              <div className="catgrid">
+                {NET_CATS.map((c) => (
+                  <button key={c.id} className={"catbtn" + (catSel === c.id ? " on" : "")}
+                    onClick={() => setCatSel(catSel === c.id ? null : c.id)}>
+                    <span className="ci">{c.icon}</span>
+                    <span className="cn">{c.name}</span>
+                    <span className="cc">{cnt(c.id)}명</span>
+                  </button>
+                ))}
+              </div>
+              {!catSel ? (
+                <div className="empty">👆 분야를 누르면 해당하는 분들이 나타납니다</div>
+              ) : shown.length === 0 ? (
                 <div className="empty">{T.netEmpty}</div>
               ) : (
-                all.map(([ic, nm, ds], i) => (
-                  <div className="person" key={chon + "-" + i}>
-                    <span className="ic">{ic}</span>
-                    <div style={{ minWidth: 0 }}><div className="nm">{nm}</div><div className="ds">{ds}</div></div>
-                    <button className="mini-act" onClick={() => viewer.chon <= 3 ? setIntro(nm) : setLock({ title: T.lockNet3Title, desc: T.lockNet3Desc, noSub: true })}>소개받기</button>
+                shown.map((p, i) => (
+                  <div className="person" key={catSel + "-" + i}>
+                    <span className="ic">{p.icon}</span>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="nm">{p.job} <span className={"tb " + (p.tier === "close" ? "close" : "sub")}>{p.tier === "close" ? T.tierCloseName : T.tierSubName}</span></div>
+                      <div className="ds">{p.desc}</div>
+                    </div>
+                    <button className="mini-act" onClick={() => viewer.chon <= 3 ? setIntro(p.job) : setLock({ title: T.lockNet3Title, desc: T.lockNet3Desc, noSub: true })}>소개받기</button>
                   </div>
                 ))
               )}
-            </div>
+            </>
           );
-        })}
+        })()}
       </section>
     ),
 
@@ -565,11 +600,11 @@ export default function Home() {
         <div className="inner">
           {subDone ? (
             <div className="msg" style={{ textAlign: "center", width: "100%" }}>
-              <b className="inline">✓ 구독 접수 완료</b> — 승인되면 4촌에 등록됩니다
+              <b className="inline">✓ 구독 접수 완료</b> — 등록되면 인맥 칸에 표시됩니다
             </div>
           ) : (
             <>
-              <div className="msg"><b>새 사업 · 인맥 소식 받기</b>구독하면 4촌으로 등록됩니다</div>
+              <div className="msg"><b>새 사업 · 인맥 소식 받기</b>구독하면 인맥 칸에 등록됩니다</div>
               <button className="mp" onClick={openSub}>📡 구독하기</button>
             </>
           )}
@@ -577,6 +612,48 @@ export default function Home() {
       </div>
 
       {/* 구독자 인증(잠금해제) 모달 */}
+      {/* ★ v51 내 소개 수정 모달 */}
+      {me && (
+        <div className="modal-bg" onClick={(e) => e.target === e.currentTarget && setMe(null)}>
+          <div className="modal">
+            <div className="sechead" style={{ border: "none", paddingBottom: 0, marginBottom: 6 }}>
+              <h2 style={{ fontSize: 17 }}>내 소개 수정</h2>
+              <span className="en" style={{ color: "var(--gold)" }}>MY PROFILE</span>
+            </div>
+            <div className="desc">인맥 칸에 공개되는 내 모습이에요. 이름·연락처는 계속 비공개입니다.</div>
+            <div className="fgroup">
+              <div className="flabel">아이콘</div>
+              <div className="iconpick">
+                {["🙋","😎","🚀","💼","💰","🩺","⚖️","📈","🎨","🍳","🏗️","💻","📚","🧠","🔥","🌟"].map((ic) => (
+                  <button key={ic} type="button" className={me.icon === ic ? "on" : ""} onClick={() => setMe({ ...me, icon: ic })}>{ic}</button>
+                ))}
+              </div>
+            </div>
+            <div className="fgroup">
+              <div className="flabel">직업 (하는 일)</div>
+              <input value={me.job} maxLength={10} placeholder="예: 마케터" onChange={(e) => setMe({ ...me, job: e.target.value })} />
+            </div>
+            <div className="fgroup">
+              <div className="flabel">나를 자랑하는 한 줄</div>
+              <input value={me.intro} maxLength={20} placeholder="예: 매출 100억 만들어 본 마케터" onChange={(e) => setMe({ ...me, intro: e.target.value })} />
+            </div>
+            <div className="fgroup">
+              <div className="flabel">생일 <span style={{ opacity: 0.6 }}>(선택 · 비공개)</span></div>
+              <input value={me.birthday} inputMode="numeric" maxLength={5} placeholder="예: 0514 (비우면 삭제)" onChange={(e) => setMe({ ...me, birthday: e.target.value })} />
+            </div>
+            <div className="person" style={{ marginTop: 10 }}>
+              <span className="ic">{me.icon}</span>
+              <div style={{ minWidth: 0 }}><div className="nm">{me.job || "직업"}</div><div className="ds">{me.intro || "자랑 한 줄"}</div></div>
+            </div>
+            {meMsg && <div style={{ color: "#ff8f8f", fontSize: 13, marginTop: 8 }}>{meMsg}</div>}
+            <div className="btnrow" style={{ marginTop: 14 }}>
+              <button className="mp" disabled={meBusy || !me.job.trim()} onClick={saveMe}>{meBusy ? "저장 중..." : "💾 저장"}</button>
+              <button className="ghost" onClick={() => setMe(null)}>닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {unlock && (
         <div className="modal-bg" onClick={(e) => e.target === e.currentTarget && setUnlock(false)}>
           <div className="modal">
@@ -629,17 +706,17 @@ export default function Home() {
                 <div style={{ fontSize: 32 }}>📡</div>
                 <div style={{ fontWeight: 800, fontSize: 17, marginTop: 10, color: "var(--mp)" }}>신청 완료!</div>
                 <div style={{ fontSize: 13.5, color: "var(--dim)", marginTop: 6 }}>
-                  4촌 등록이 끝나면 문자로 알려드릴게요.<br />그때부터 잠긴 칸도 번호로 열 수 있습니다.
+                  등록이 끝나면 문자로 알려드릴게요.<br />그때부터 잠긴 칸도 번호로 열 수 있습니다.
                 </div>
                 <div style={{ marginTop: 18 }}><button onClick={() => setSubOpen(false)}>닫기</button></div>
               </div>
             ) : (
               <>
                 <div className="sechead" style={{ border: "none", paddingBottom: 0, marginBottom: 6 }}>
-                  <h2 style={{ fontSize: 17 }}>구독 = 4촌 등록</h2>
+                  <h2 style={{ fontSize: 17 }}>구독 신청</h2>
                   <span className="en" style={{ color: "var(--mp)" }}>SUBSCRIBE</span>
                 </div>
-                <div className="desc">신청 후 <b style={{ color: "var(--mp)" }}>4촌으로 등록</b>됩니다. 이름·연락처는 비공개 — 아이콘·직업·자랑 한 줄만 공개돼요.</div>
+                <div className="desc">신청 후 <b style={{ color: "var(--mp)" }}>구독자로 등록</b>됩니다. 이름·연락처는 비공개 — 아이콘·직업·자랑 한 줄만 공개돼요.</div>
                 <div className="fgroup">
                   <div className="flabel">프로필 아이콘 (공개)</div>
                   <div className="iconpick">
@@ -668,6 +745,11 @@ export default function Home() {
                   <textarea value={form.intro} maxLength={20} rows={2} placeholder="예: 매출 100억 만들어 본 마케터"
                     style={{ resize: "vertical" }}
                     onChange={(e) => setForm({ ...form, intro: e.target.value })} />
+                </div>
+                <div className="fgroup">
+                  <div className="flabel">생일 <span style={{ opacity: 0.6 }}>(선택 · 비공개 — 축하 인사만 드려요)</span></div>
+                  <input value={form.birthday} inputMode="numeric" maxLength={5} placeholder="예: 0514"
+                    onChange={(e) => setForm({ ...form, birthday: e.target.value })} />
                 </div>
                 <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
                   <button className="sm ghost" onClick={() => setSubOpen(false)}>닫기</button>

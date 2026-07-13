@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { SECTION_LABELS, mergeConfig, BUILD, CANONICAL_HOST } from "@/lib/config";
+import { SECTION_LABELS, mergeConfig, BUILD, CANONICAL_HOST, NET_CATS, autoCat } from "@/lib/config";
 
 // 오류 시 진단 페이지로 바로 가는 링크 — 캡처해서 보내면 원인 파악 가능
 function DiagLink() {
@@ -173,6 +173,8 @@ export default function Admin() {
         job: e.job ?? s.job ?? "",
         intro: e.intro ?? s.intro ?? "",
         icon: e.icon ?? s.icon ?? "🙋",
+        birthday: e.birthday ?? s.birthday ?? "",
+        cat: e.cat ?? s.cat ?? "",
       });
       if (!res?.ok) { setSubMsg("err:저장 실패 — 서버가 저장을 거부했습니다."); return; }
       // ★ v39: 디비에 실제로 기록된 값을 돌려받아 대조 — 화면과 디비가 다르면 즉시 들통
@@ -595,6 +597,60 @@ alter table visits add column if not exists is_admin boolean default false;`}</p
             </div>
           )}
 
+          {/* ★ v52 생일 임박 (30일 이내) — 비공개, 나만 보는 관리용 */}
+          {(() => {
+            const now = new Date(Date.now() + 9 * 3600 * 1000);
+            const y = now.getUTCFullYear();
+            const today = Date.UTC(y, now.getUTCMonth(), now.getUTCDate());
+            const list = (data.subscribers || [])
+              .filter((s2) => s2.approved && s2.birthday)
+              .map((s2) => {
+                const mm = parseInt(String(s2.birthday).slice(0, 2), 10);
+                const dd = parseInt(String(s2.birthday).slice(3), 10);
+                if (!mm || !dd) return null;
+                let t = Date.UTC(y, mm - 1, dd);
+                if (t < today) t = Date.UTC(y + 1, mm - 1, dd);
+                return { ...s2, dday: Math.round((t - today) / 86400000) };
+              })
+              .filter((x) => x && x.dday <= 30)
+              .sort((a, b) => a.dday - b.dday);
+            const close = list.filter((x) => (parseInt(x.chon, 10) || 4) <= 3);
+            const subsOnly = list.filter((x) => (parseInt(x.chon, 10) || 4) === 4);
+            const row = (x) => (
+              <div key={x.id} style={{ border: "1px solid rgba(255,255,255,.12)", borderRadius: 8, padding: "8px 10px", fontSize: 13, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <b style={{ color: x.dday <= 7 ? "var(--red)" : "var(--gold)", minWidth: 44 }}>{x.dday === 0 ? "🎉 오늘!" : "D-" + x.dday}</b>
+                <span>🎂 {x.birthday}</span>
+                <span>{x.icon || "🙋"} <b>{x.name}</b></span>
+                <span className={"chip t" + (parseInt(x.chon, 10) || 4)}>{parseInt(x.chon, 10) || 4}촌</span>
+                <span style={{ opacity: 0.8 }}>{x.job}</span>
+              </div>
+            );
+            return (
+              <div className="card">
+                <div className="sechead"><h2>🎂 생일 임박</h2><span className="en">BIRTHDAYS</span></div>
+                {list.length === 0 ? (
+                  <div className="adm-msg" style={{ textAlign: "left", padding: 0 }}>
+                    30일 이내 생일인 구독자가 없습니다. 생일은 구독 신청 시(선택) 또는 아래 구독자 카드의 "생일 MM-DD" 칸으로 입력됩니다.
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {close.length > 0 && <>
+                      <div className="flabel" style={{ color: "var(--gold)" }}>가까운 사이 (1~3촌) — 선물 준비 추천 🎁</div>
+                      {close.map(row)}
+                    </>}
+                    {subsOnly.length > 0 && <>
+                      <div className="flabel" style={{ color: "var(--mp)" }}>구독자 (4촌) — 축하 문자 추천 💬</div>
+                      {subsOnly.map(row)}
+                    </>}
+                  </div>
+                )}
+                <div className="adm-msg" style={{ padding: "8px 0 0", textAlign: "left", opacity: 0.7 }}>
+                  생일·이름은 사이트에 절대 공개되지 않습니다. 7일 이내는 빨간색으로 표시됩니다.
+                </div>
+              </div>
+            );
+          })()}
+
           {/* 구독자 관리 */}
           <div className="card">
             <div className="toolbar">
@@ -668,6 +724,16 @@ alter table visits add column if not exists is_admin boolean default false;`}</p
                         onChange={(ev) => setEdit(s.id, { job: ev.target.value })} />
                       <input style={{ flex: 1, minWidth: 120 }} value={e.intro ?? s.intro ?? ""} placeholder="한줄소개(공개)"
                         onChange={(ev) => setEdit(s.id, { intro: ev.target.value })} />
+                    </div>
+                    {/* ★ v52: 생일(비공개) + 카테고리 수동 지정 */}
+                    <div className="ctrl" style={{ marginTop: 6, flexWrap: "wrap" }}>
+                      <input style={{ width: 110 }} value={e.birthday ?? s.birthday ?? ""} placeholder="생일 MM-DD" title="생일 (비공개, 선택)"
+                        onChange={(ev) => setEdit(s.id, { birthday: ev.target.value })} />
+                      <select value={e.cat ?? s.cat ?? ""} title="인맥 카테고리 (비우면 직업 기반 자동)"
+                        onChange={(ev) => setEdit(s.id, { cat: ev.target.value })}>
+                        <option value="">자동: {(NET_CATS.find((c) => c.id === autoCat(e.job ?? s.job, e.intro ?? s.intro)) || {}).name}</option>
+                        {NET_CATS.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+                      </select>
                     </div>
                     <div className="ctrl">
                       <select value={chonVal} onChange={(ev) => setEdit(s.id, { chon: ev.target.value })}>
@@ -958,6 +1024,11 @@ alter table visits add column if not exists is_admin boolean default false;`}</p
                             onChange={(e) => ops.set(pi, "job", e.target.value)} />
                           <input style={{ flex: 1, minWidth: 0 }} value={p.desc} placeholder="한 줄 소개"
                             onChange={(e) => ops.set(pi, "desc", e.target.value)} />
+                          <select style={{ width: 96, flexShrink: 0 }} value={p.cat || ""} title="카테고리 (비우면 자동)"
+                            onChange={(e) => ops.set(pi, "cat", e.target.value)}>
+                            <option value="">자동</option>
+                            {NET_CATS.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+                          </select>
                           <button className="sm ghost" onClick={() => ops.move(pi, -1)}>▲</button>
                           <button className="sm ghost" onClick={() => ops.move(pi, 1)}>▼</button>
                           <button className="sm ghost" onClick={() => ops.del(pi)}>✕</button>

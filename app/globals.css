@@ -303,3 +303,18 @@ button{min-height:42px}
 .post-t{font-weight:800;font-size:14.5px;flex:1;min-width:0}
 .post-d{font-size:11.5px;color:var(--dim);flex-shrink:0}
 .post-b{font-size:14px;line-height:1.85;color:var(--text);padding:2px 0 14px 18px;word-break:keep-all}
+
+/* ★ v52: 인맥 카테고리 그리드 (3×2) */
+.tierlegend{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;font-size:12.5px;color:var(--dim);word-break:keep-all}
+.tb{display:inline-block;font-size:11px;font-weight:800;border-radius:6px;padding:1px 7px;vertical-align:1px}
+.tb.close{color:#17182E;background:var(--gold)}
+.tb.sub{color:#fff;background:var(--mp)}
+.person .nm .tb{margin-left:6px}
+.catgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:6px 0 12px}
+.catbtn{display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:12px 4px;color:var(--text);cursor:pointer;min-height:42px;transition:border-color .15s, background .15s}
+.catbtn .ci{font-size:20px;line-height:1}
+.catbtn .cn{font-size:11.5px;font-weight:700;word-break:keep-all;text-align:center;line-height:1.3}
+.catbtn .cc{font-size:11px;color:var(--dim)}
+.catbtn.on{border-color:var(--gold);background:rgba(255,201,60,.12)}
+.catbtn.on .cc{color:var(--gold);font-weight:800}
+@media (max-width:380px){.catbtn .cn{font-size:10.5px}}
