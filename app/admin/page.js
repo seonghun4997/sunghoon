@@ -808,6 +808,36 @@ alter table meetings enable row level security;`}</pre>
                     미리보기 ({firstTarget.name}님에게): "{previewText}"
                   </div>
                 )}
+                {/* ★ v55: 내 폰으로 직접 보내기 — [Web발신] 없이 개인 문자로 발송 */}
+                {fuText.trim() && fuIds.length > 0 && (
+                  <details style={{ marginTop: 10 }}>
+                    <summary style={{ cursor: "pointer", fontSize: 13, color: "var(--gold)" }}>
+                      📱 내 폰으로 직접 보내기 — [Web발신] 표시 없이, 개인 문자로 도착
+                    </summary>
+                    <div className="adm-msg" style={{ padding: "6px 0 8px", textAlign: "left", opacity: 0.75 }}>
+                      사람별 버튼을 누르면 문자 앱이 번호·문구가 채워진 채 열립니다. 전송만 누르면 끝! (이 방식은 링크가 자동으로 안 붙으니 필요하면 문구에 직접 넣어주세요)
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {fuIds.map((id) => {
+                        const x = subById(id);
+                        if (!x) return null;
+                        const digits = String(x.phone || "").replace(/\D/g, "");
+                        const body = fuText
+                          .replace(/\[이름\]/g, x.name || "구독자")
+                          .replace(/\[횟수\]/g, (data.meetCounts?.[id] || 0) ? data.meetCounts[id] + "번째" : "이번");
+                        return (
+                          <div key={"sms-" + id} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 13 }}>
+                            <span style={{ minWidth: 90 }}>{x.icon || "🙋"} <b>{x.name}</b></span>
+                            <a className="sm" style={{ textDecoration: "none", background: "var(--gold)", color: "#17182E", fontWeight: 800, borderRadius: 8, padding: "7px 12px" }}
+                              href={"sms:" + digits + "?&body=" + encodeURIComponent(body)}>
+                              문자 앱 열기 →
+                            </a>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </details>
+                )}
                 <div className="adm-msg" style={{ padding: "6px 0 0", textAlign: "left", opacity: 0.75 }}>
                   모든 문자 끝에 "사이트방문:" / "구독 취소:" 링크가 자동으로 붙습니다. 대기중인 사람에게도 발송됩니다.
                 </div>
