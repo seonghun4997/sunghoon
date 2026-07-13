@@ -321,3 +321,13 @@ button{min-height:42px}
 
 /* ★ v58: 실제 도착 문자 미리보기 */
 .smsprev{white-space:pre-wrap;word-break:break-all;background:#101228;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:12.5px;line-height:1.7;color:var(--text);margin:0}
+
+/* ★ v62: 잠금 위 공개 훅 + 정보 잠금 버튼 + 공유 필 */
+.tz-hooks{display:flex;flex-direction:column;gap:6px;align-items:flex-start;margin-bottom:12px;word-break:keep-all}
+.tz-icons{font-size:18px;letter-spacing:2px}
+.tz-big{font-size:15px;color:var(--gold)}
+.tz-sub{font-size:12.5px;color:var(--dim)}
+.tz-chips{display:flex;flex-wrap:wrap;gap:6px}
+.hookchip{font-size:12px;border:1px dashed var(--gold);color:var(--text);border-radius:999px;padding:4px 10px;background:rgba(255,201,60,.07)}
+.lockv{font-family:inherit;font-size:12.5px;color:var(--gold);background:rgba(255,201,60,.08);border:1px dashed var(--gold);border-radius:8px;padding:5px 10px;cursor:pointer}
+.sharepill{position:absolute;top:14px;right:14px;z-index:2;font-family:inherit;font-size:12px;font-weight:800;color:#17182E;background:var(--gold);border:none;border-radius:999px;padding:7px 12px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.35)}

@@ -1,4 +1,4 @@
-import { sb, unsubToken } from "@/lib/supabase";
+import { sb, unsubToken, refToken } from "@/lib/supabase";
 import { sendSMS } from "@/lib/solapi";
 import { NextResponse } from "next/server";
 
@@ -30,6 +30,14 @@ export async function POST(req) {
     if (!name || !job || digits.length < 10) {
       return NextResponse.json({ error: "invalid" }, { status: 400 });
     }
+    // ★ v62: 추천 — 링크 코드("id-token") 검증 or 추천인 이름 수동 입력
+    let referrerId = null;
+    {
+      const rc = String(b.refCode || "").trim();
+      const m = rc.match(/^(\d+)-([0-9a-f]{10})$/);
+      if (m && refToken(m[1]) === m[2]) referrerId = parseInt(m[1], 10);
+    }
+    const refName = String(b.refName || "").trim().slice(0, 20) || null;
     const phone =
       digits.length === 11
         ? digits.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3")
@@ -37,9 +45,9 @@ export async function POST(req) {
     // ★ v47: 승인제 — 신청은 대기로 접수, 주인이 확인 후 등록 (등록 시 환영 문자 발송)
     let { error } = await sb()
       .from("subscribers")
-      .insert({ name, phone, phone_digits: digits, job, intro, icon, chon: 4, ...(birthday ? { birthday } : {}) });
-    // icon/birthday 컬럼이 아직 없는 디비면 해당 항목 빼고 재시도
-    if (error && /icon|birthday/.test(String(error.message))) {
+      .insert({ name, phone, phone_digits: digits, job, intro, icon, chon: 4, ...(birthday ? { birthday } : {}), ...(referrerId ? { referrer_id: referrerId } : {}), ...(refName ? { ref_name: refName } : {}) });
+    // icon/birthday/추천 컬럼이 아직 없는 디비면 해당 항목 빼고 재시도
+    if (error && /icon|birthday|referrer_id|ref_name/.test(String(error.message))) {
       ({ error } = await sb()
         .from("subscribers")
         .insert({ name, phone, phone_digits: digits, job, intro, chon: 4 }));

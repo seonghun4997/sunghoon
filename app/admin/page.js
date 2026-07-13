@@ -638,34 +638,72 @@ alter table visits add column if not exists is_admin boolean default false;`}</p
             <div className="adm-msg" style={{ paddingBottom: 0 }}>{tip}</div>
           </div>
 
-          {/* ★ v50 구독자 관심도 */}
-          {data.marketing?.enabled && (
-            <div className="card">
-              <div className="sechead"><h2>구독자 관심도</h2><span className="en">ENGAGEMENT</span></div>
-              {(data.marketing.engagement || []).length === 0 ? (
-                <div className="adm-msg" style={{ textAlign: "left", padding: 0 }}>
-                  아직 데이터가 없습니다. 구독자가 사이트에서 <b>번호 인증</b>을 하면 그 사람의 방문 횟수·체류시간이 여기에 쌓입니다. (v50 배포 이후 방문부터 집계)
+          {/* ★ v61 구독자 관심도 — 전부 자동 집계 (방문·체류·문자 반응·만남) */}
+          {(() => {
+            const engMap = {};
+            (data.marketing?.engagement || []).forEach((e) => { engMap[e.id] = e; });
+            const rows = (data.subscribers || []).filter((x) => x.approved).map((x) => {
+              const web = engMap[x.id] || { visits: 0, totalDur: 0, lastAt: null };
+              const sm = data.smsStats?.[x.id] || { sent: 0, reacted: 0 };
+              const meets = data.meetCounts?.[x.id] || 0;
+              // 점수: 방문 5점 · 체류 1분당 1점 · 문자 반응 10점 · 만남 20점 (전부 자동)
+              const score = web.visits * 5 + Math.round((web.totalDur || 0) / 60) + sm.reacted * 10 + meets * 20;
+              const grade = score >= 100 ? "S" : score >= 60 ? "A" : score >= 30 ? "B" : score >= 10 ? "C" : "D";
+              return { ...x, web, sm, meets, score, grade };
+            }).sort((a, b) => b.score - a.score || (a.name || "").localeCompare(b.name || ""));
+            const gColor = { S: "var(--gold)", A: "var(--hp)", B: "var(--mp)", C: "var(--dim)", D: "var(--dim)" };
+            return (
+              <div className="card">
+                <div className="sechead"><h2>구독자 관심도</h2><span className="en">ENGAGEMENT</span></div>
+                {data.smsEventsTableMissing && (
+                  <div className="adm-msg" style={{ textAlign: "left", color: "#ff9f43", paddingTop: 0 }}>
+                    ⚠️ 문자 반응 추적을 켜려면 Supabase → SQL Editor에서 1회 실행 (zip의 supabase/문자이벤트_테이블.sql):
+                    <pre style={{ whiteSpace: "pre-wrap", fontSize: 11, background: "rgba(255,255,255,.06)", padding: 8, borderRadius: 6, marginTop: 6 }}>{`create table if not exists sms_events (
+  id bigint generated always as identity primary key,
+  created_at timestamptz not null default now(),
+  sub_id bigint not null, kind text not null
+);
+create index if not exists idx_smsevents_sub on sms_events (sub_id);
+alter table sms_events enable row level security;`}</pre>
+                  </div>
+                )}
+                {!data.marketing?.enabled && (
+                  <div className="adm-msg" style={{ textAlign: "left", color: "#ff9f43", paddingTop: 0 }}>
+                    ⚠️ 방문·체류 집계는 방문지표 SQL(방문지표_컬럼추가.sql) 실행 후 켜집니다.
+                  </div>
+                )}
+                {rows.length === 0 ? (
+                  <div className="adm-msg" style={{ textAlign: "left", padding: 0 }}>승인된 구독자가 없습니다.</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {rows.map((x, i) => (
+                      <div key={x.id} style={{ border: "1px solid rgba(255,255,255,.12)", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                          <b style={{ color: "var(--gold)", minWidth: 26 }}>{i + 1}위</b>
+                          <span>{x.icon || "🙋"}</span>
+                          <b>{x.name}</b>
+                          <span className={"chip t" + (parseInt(x.chon, 10) || 4)}>{parseInt(x.chon, 10) || 4}촌</span>
+                          <b style={{ marginLeft: "auto", color: gColor[x.grade], fontSize: 15 }}>{x.grade}</b>
+                          <span style={{ color: "var(--dim)", fontSize: 12 }}>{x.score}점</span>
+                        </div>
+                        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 6, color: "var(--dim)", fontSize: 12.5 }}>
+                          <span>🌐 방문 <b style={{ color: "var(--text)" }}>{x.web.visits}</b>회</span>
+                          <span>⏱ 체류 <b style={{ color: "var(--text)" }}>{Math.round((x.web.totalDur || 0) / 60)}</b>분</span>
+                          <span>📲 문자 반응 <b style={{ color: x.sm.reacted > 0 ? "var(--hp)" : "var(--text)" }}>{x.sm.reacted}</b>/{x.sm.sent}통{x.sm.sent > 0 ? " (" + Math.round((x.sm.reacted / x.sm.sent) * 100) + "%)" : ""}</span>
+                          <span>🤝 만남 <b style={{ color: "var(--text)" }}>{x.meets}</b>회</span>
+                          {x.web.lastAt && <span>마지막 방문 {fmtKST(x.web.lastAt).slice(5, 11)}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="adm-msg" style={{ padding: "10px 0 0", textAlign: "left", opacity: 0.7 }}>
+                  전부 자동 집계됩니다 — 점수 = 방문 5점 · 체류 1분당 1점 · 문자 반응(문자 받고 48시간 내 사이트 방문) 10점 · 만남 20점 → S(100+) A(60+) B(30+) C(10+) D.
+                  방문·체류·문자 반응은 <b>번호 인증한 방문</b>만 잡힙니다.
                 </div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {(data.marketing.engagement || []).map((e, i) => (
-                    <div key={e.id} style={{ border: "1px solid rgba(255,255,255,.12)", borderRadius: 8, padding: "8px 10px", fontSize: 13, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                      <b style={{ color: "var(--gold)", minWidth: 22 }}>{i + 1}위</b>
-                      <b>{e.name}</b>
-                      <span className={"chip t" + e.chon}>{e.chon}촌</span>
-                      <span>방문 <b>{e.visits}</b>회</span>
-                      <span>총 체류 <b>{e.totalDur >= 60 ? Math.floor(e.totalDur / 60) + "분" : e.totalDur + "초"}</b></span>
-                      <span>평균 <b>{e.avgDur}</b>초</span>
-                      <span className="time" style={{ opacity: 0.7 }}>마지막 {fmtKST(e.lastAt)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="adm-msg" style={{ padding: "8px 0 0", textAlign: "left", opacity: 0.7 }}>
-                번호 인증을 한 구독자만 잡힙니다 (미인증 방문은 익명이라 누군지 알 수 없음). 순위 = 방문 횟수 + 체류시간 종합.
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ★ v52 생일 임박 (30일 이내) — 비공개, 나만 보는 관리용 */}
           {(() => {
@@ -716,6 +754,87 @@ alter table visits add column if not exists is_admin boolean default false;`}</p
                 )}
                 <div className="adm-msg" style={{ padding: "8px 0 0", textAlign: "left", opacity: 0.7 }}>
                   생일·이름은 사이트에 절대 공개되지 않습니다. 7일 이내는 빨간색으로 표시됩니다.
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ★ v62 추천 현황 */}
+          {(() => {
+            const subById = (id) => (data.subscribers || []).find((x) => x.id === id);
+            const refs = data.referrals || [];
+            const pending = refs.filter((r) => r.status !== "paid");
+            // 이름만 입력됐고 아직 추천 확정이 안 된 승인 구독자 → 수동 연결 대상
+            const manual = (data.subscribers || []).filter((x) => x.approved && x.ref_name && !refs.some((r) => r.referee_id === x.id));
+            const refCount = {};
+            refs.forEach((r) => { refCount[r.referrer_id] = (refCount[r.referrer_id] || 0) + 1; });
+            return (
+              <div className="card">
+                <div className="sechead"><h2>🎁 추천 현황</h2><span className="en">REFERRAL</span>
+                  {pending.length > 0 && <span style={{ marginLeft: "auto", color: "var(--red)", fontWeight: 800, fontSize: 13 }}>🍗 지급 대기 {pending.length}건</span>}
+                </div>
+                {data.referralsTableMissing && (
+                  <div className="adm-msg" style={{ textAlign: "left", color: "#ff9f43", paddingTop: 0 }}>
+                    ⚠️ 추천 테이블이 아직 없습니다. Supabase → SQL Editor에서 1회 실행 (zip의 supabase/추천제도_테이블.sql):
+                    <pre style={{ whiteSpace: "pre-wrap", fontSize: 11, background: "rgba(255,255,255,.06)", padding: 8, borderRadius: 6, marginTop: 6 }}>{`alter table subscribers add column if not exists referrer_id bigint;
+alter table subscribers add column if not exists ref_name text;
+create table if not exists referrals (
+  id bigint generated always as identity primary key,
+  created_at timestamptz not null default now(),
+  referrer_id bigint not null, referee_id bigint not null,
+  status text not null default 'pending', paid_at timestamptz
+);
+create index if not exists idx_referrals_referrer on referrals (referrer_id);
+alter table referrals enable row level security;`}</pre>
+                  </div>
+                )}
+                {refs.length === 0 && manual.length === 0 && !data.referralsTableMissing ? (
+                  <div className="adm-msg" style={{ textAlign: "left", padding: 0 }}>
+                    아직 추천이 없습니다. 구독자가 인증 후 "🎁 추천하고 치킨 받기"로 링크를 공유하면, 그 링크로 온 신규 구독자를 <b>승인하는 순간</b> 여기에 자동으로 잡힙니다 (추천인·사장님께 알림 문자도 자동 발송).
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {refs.map((r) => {
+                      const a = subById(r.referrer_id), b2 = subById(r.referee_id);
+                      return (
+                        <div key={r.id} style={{ border: "1px solid " + (r.status === "paid" ? "rgba(255,255,255,.12)" : "var(--gold)"), borderRadius: 8, padding: "8px 10px", fontSize: 13, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                          <span className="time" style={{ opacity: 0.7 }}>{fmtKST(r.created_at).slice(5, 11)}</span>
+                          <b>{a?.name || "?"}</b>
+                          <span style={{ color: "var(--dim)" }}>님이</span>
+                          <b>{b2?.name || "?"}</b>
+                          <span style={{ color: "var(--dim)" }}>님 추천</span>
+                          {refCount[r.referrer_id] > 1 && <span style={{ color: "var(--gold)", fontSize: 12 }}>누적 {refCount[r.referrer_id]}명</span>}
+                          {r.status === "paid" ? (
+                            <span style={{ marginLeft: "auto", color: "var(--hp)", fontSize: 12 }}>✓ 지급 완료 {r.paid_at ? fmtKST(r.paid_at).slice(5, 11) : ""}</span>
+                          ) : (
+                            <button className="sm" style={{ marginLeft: "auto" }} onClick={async () => {
+                              if (!confirm((a?.name || "") + "님에게 치킨 쿠폰을 보내셨나요? 지급 완료로 표시합니다.")) return;
+                              await post({ action: "ref_paid", id: r.id }); load(key);
+                            }}>🍗 지급 완료</button>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {manual.map((x) => (
+                      <div key={"m" + x.id} style={{ border: "1px dashed var(--mp)", borderRadius: 8, padding: "8px 10px", fontSize: 13, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                        <span style={{ color: "var(--mp)" }}>✍️ 수동 확인</span>
+                        <b>{x.name}</b>
+                        <span style={{ color: "var(--dim)" }}>님이 입력한 추천인: "{x.ref_name}"</span>
+                        <select style={{ marginLeft: "auto" }} value="" onChange={async (e) => {
+                          const rid = parseInt(e.target.value, 10);
+                          if (!rid) return;
+                          const r = await post({ action: "ref_link", referrer_id: rid, referee_id: x.id });
+                          if (r.ok) load(key); else alert("연결 실패 — 이미 연결됐거나 잘못된 대상입니다.");
+                        }}>
+                          <option value="">추천인 지정 →</option>
+                          {(data.subscribers || []).filter((y) => y.id !== x.id).map((y) => <option key={y.id} value={y.id}>{y.name}</option>)}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="adm-msg" style={{ padding: "10px 0 0", textAlign: "left", opacity: 0.7 }}>
+                  흐름: 추천 링크로 구독 신청 → <b>승인 순간 자동 확정</b> → 추천인에게 "쿠폰 보내드릴게요" 문자 + 나에게 알림 문자 자동 발송 → 카톡 선물하기로 BHC 쿠폰 전송 → [🍗 지급 완료] 클릭. 이름만 입력된 건은 위 "수동 확인"에서 연결하면 됩니다.
                 </div>
               </div>
             );

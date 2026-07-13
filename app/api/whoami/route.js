@@ -1,4 +1,4 @@
-import { sb, isApproved } from "@/lib/supabase";
+import { sb, isApproved, refToken } from "@/lib/supabase";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +25,7 @@ export async function POST(req) {
       return NextResponse.json({ ok: false }, { headers: NO_CACHE });
     }
     return NextResponse.json(
-      { ok: true, chon: parseInt(row.chon, 10) || 4, name: row.name || "", job: row.job || "", intro: row.intro || "", icon: row.icon || "🙋", birthday: row.birthday || "" },
+      { ok: true, chon: parseInt(row.chon, 10) || 4, name: row.name || "", job: row.job || "", intro: row.intro || "", icon: row.icon || "🙋", birthday: row.birthday || "", refCode: row.id + "-" + refToken(row.id) },
       { headers: NO_CACHE }
     );
   } catch (e) {

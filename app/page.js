@@ -26,7 +26,7 @@ export default function Home() {
   const [subOpen, setSubOpen] = useState(false);
   const [subDone, setSubDone] = useState(false);
   const [sending, setSending] = useState(false);
-  const [form, setForm] = useState({ name: "", phone: "", job: "", intro: "", icon: "🙋", birthday: "" });
+  const [form, setForm] = useState({ name: "", phone: "", job: "", intro: "", icon: "🙋", birthday: "", refName: "" });
   const [toastMsg, setToastMsg] = useState("");
   const [lock, setLock] = useState(null); // {title, desc} — 구독 유도 모달
   // ★ v51: 구독자 본인 소개 수정 모달
@@ -35,6 +35,7 @@ export default function Home() {
   const [meMsg, setMeMsg] = useState("");
   const loadDataRef = useRef(null);
   const [catSel, setCatSel] = useState(null); // ★ v52: 인맥 카테고리 선택 (null = 미선택)
+  const [refOpen, setRefOpen] = useState(false); // ★ v62: 추천 모달
   const [viewer, setViewer] = useState(null); // {chon, name} — 인증된 구독자 등급 (null = 미구독 방문자)
   const [unlock, setUnlock] = useState(false); // 구독자 인증 모달
   const [uPhone, setUPhone] = useState("");
@@ -91,6 +92,11 @@ export default function Home() {
     } catch (e) {}
 
     const src = new URLSearchParams(location.search).get("src");
+    // ★ v62: 추천 링크(?ref=코드)로 들어오면 저장 → 구독 신청 시 자동 연결
+    try {
+      const rc = new URLSearchParams(location.search).get("ref");
+      if (rc && /^\d+-[0-9a-f]{10}$/.test(rc)) localStorage.setItem("ref_code", rc);
+    } catch (e) {}
     // ★ v50 마케팅 지표: 익명 방문자ID(재방문 판별) + 어드민 기기 제외 + 체류시간(초)
     let vid = null;
     try {
@@ -154,7 +160,7 @@ export default function Home() {
       if (saved) {
         fetch("/api/whoami", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: saved }), cache: "no-store" })
           .then((r) => r.json())
-          .then((d) => { if (d.ok) setViewer({ chon: d.chon, name: d.name, job: d.job || "", intro: d.intro || "", icon: d.icon || "🙋", birthday: d.birthday || "", phone: saved }); else localStorage.removeItem("viewer_phone"); })
+          .then((d) => { if (d.ok) setViewer({ chon: d.chon, name: d.name, job: d.job || "", intro: d.intro || "", icon: d.icon || "🙋", birthday: d.birthday || "", refCode: d.refCode || "", phone: saved }); else localStorage.removeItem("viewer_phone"); })
           .catch(() => {});
       }
     } catch (e) {}
@@ -209,7 +215,7 @@ export default function Home() {
       const r = await fetch("/api/whoami", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: uPhone }), cache: "no-store" });
       const d = await r.json();
       if (d.ok) {
-        setViewer({ chon: d.chon, name: d.name, job: d.job || "", intro: d.intro || "", icon: d.icon || "🙋", birthday: d.birthday || "", phone: uPhone });
+        setViewer({ chon: d.chon, name: d.name, job: d.job || "", intro: d.intro || "", icon: d.icon || "🙋", birthday: d.birthday || "", refCode: d.refCode || "", phone: uPhone });
         try { localStorage.setItem("viewer_phone", uPhone); } catch (e) {}
         // ★ v50: 이번 방문 기록에 인증 번호 연결 → 어드민 "구독자 관심도"에 집계
         try {
@@ -238,10 +244,12 @@ export default function Home() {
   async function doSub() {
     setSending(true);
     try {
+      let refCode = "";
+      try { refCode = localStorage.getItem("ref_code") || ""; } catch (e) {}
       const r = await fetch("/api/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, refCode }),
       });
       const d = await r.json();
       if (d.error === "dup") { toast("이미 구독된 번호입니다"); setSending(false); return; }
@@ -257,7 +265,7 @@ export default function Home() {
     const url = location.origin + "/?src=share";
     if (navigator.share) {
       try {
-        await navigator.share({ title: T.name + " — " + T.subtitle, text: "야생의 " + T.name + "을 만나보세요", url });
+        await navigator.share({ title: T.name + " — " + T.subtitle, text: "『앗! 야생의 " + T.name + "이 나타났다!』 " + cfg.biz.length + "개 사업을 굴리는 창업가의 RPG 상태창 — 포획해보세요 🎯", url });
       } catch (e) {}
     } else {
       try { await navigator.clipboard.writeText(url); toast("링크가 복사됐습니다!"); }
@@ -302,7 +310,8 @@ export default function Home() {
     ),
 
     hero: (
-      <section className="card" key="hero">
+      <section className="card" key="hero" style={{ position: "relative" }}>
+        <button className="sharepill" onClick={shareLink} title="이 상태창 공유하기">📤 공유</button>
         <div className="hero">
           <div className="sprite-box">
             <img src="/profile.jpg" alt={T.name} width={126} height={126} />
@@ -340,12 +349,23 @@ export default function Home() {
     info: (
       <section className="card" key="info">
         <div className="sechead"><h2>기본 정보</h2><span className="en">INFO</span></div>
-        {cfg.info.map((row, i) => (
-          <div className="inforow" key={i}>
-            <span className="k">{row.k}</span>
-            <span className="v"><ML t={row.v} /></span>
-          </div>
-        ))}
+        {cfg.info.map((row, i) => {
+          // ★ v62: 나이(출생)·연락처는 구독자에게만 공개
+          const isLocked = !viewer && ["출생", "나이", "연락처", "전화"].some((w) => String(row.k).includes(w));
+          return (
+            <div className="inforow" key={i}>
+              <span className="k">{row.k}</span>
+              {isLocked ? (
+                <span className="v">
+                  <button className="lockv" onClick={openSub}>🔒 구독자에게만 공개</button>
+                  <button className="linklike" style={{ marginLeft: 8, fontSize: 12 }} onClick={() => { setUMsg(""); setUnlock(true); }}>이미 구독자예요</button>
+                </span>
+              ) : (
+                <span className="v"><ML t={row.v} /></span>
+              )}
+            </div>
+          );
+        })}
       </section>
     ),
 
@@ -376,18 +396,26 @@ export default function Home() {
         <div className="sechead"><h2>{T.bizTitle}</h2><span className="en">BUSINESS</span></div>
         {T.bizDesc?.trim() && <div className="desc">{T.bizDesc}</div>}
         {!viewer ? (
-          <div className="tease">
-            <div className="tease-blur" aria-hidden="true">
-              {cfg.biz.slice(0, 4).map((b, i) => (
-                <div className="biz" key={i}>
-                  <span className="ic">{b.icon}</span>
-                  <div style={{ minWidth: 0, flex: 1 }}><div className="nm">{b.name}</div><div className="tg">{b.tag}</div></div>
-                  <span className={`stage ${STAGE_CLS[b.stage] || "early"}`}>{b.stage}</span>
-                </div>
-              ))}
+          <>
+            {/* ★ v62: 잠금 위 공개 훅 — 궁금하게 만들기 */}
+            <div className="tz-hooks">
+              <span className="tz-icons">{cfg.biz.map((b) => b.icon).join(" ")}</span>
+              <b className="tz-big">{cfg.biz.length}개 사업 동시 운영 중</b>
+              <span className="tz-sub">{cfg.biz.filter((b) => b.stage === "고도화" || b.stage === "확장").length}개 고도화 · {cfg.biz.filter((b) => b.stage === "초기" || b.stage === "성장").length}개 신규 확장</span>
             </div>
-            <div className="tease-gate"><Gate desc={T.bizGateDesc} /></div>
-          </div>
+            <div className="tease">
+              <div className="tease-blur" aria-hidden="true">
+                {cfg.biz.slice(0, 4).map((b, i) => (
+                  <div className="biz" key={i}>
+                    <span className="ic">{b.icon}</span>
+                    <div style={{ minWidth: 0, flex: 1 }}><div className="nm">{b.name}</div><div className="tg">{b.tag}</div></div>
+                    <span className={`stage ${STAGE_CLS[b.stage] || "early"}`}>{b.stage}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="tease-gate"><Gate desc={T.bizGateDesc} /></div>
+            </div>
+          </>
         ) : cfg.biz.map((b, i) => (
           <div className="biz" key={i} style={viewer.chon <= 3 ? { flexWrap: "wrap" } : undefined}>
             <span className="ic">{b.icon}</span>
@@ -403,7 +431,7 @@ export default function Home() {
             )}
           </div>
         ))}
-        {viewer ? <div className="note">🔓 구독자로 인증됨{viewer.chon >= 4 ? " — 상세 설명은 가까운 사이(3회 이상 만남)부터" : ""} · <button className="linklike" onClick={openMe}>✏️ 내 소개 수정</button> · <button className="linklike" onClick={() => { try { localStorage.removeItem("viewer_phone"); } catch (e) {} setViewer(null); }}>번호 변경</button></div> : (T.bizNote?.trim() && <div className="note">{T.bizNote}</div>)}
+        {viewer ? <div className="note">🔓 구독자로 인증됨{viewer.chon >= 4 ? " — 상세 설명은 가까운 사이(3회 이상 만남)부터" : ""} · <button className="linklike" onClick={() => setRefOpen(true)}>🎁 추천하고 치킨 받기</button> · <button className="linklike" onClick={openMe}>✏️ 내 소개 수정</button> · <button className="linklike" onClick={() => { try { localStorage.removeItem("viewer_phone"); } catch (e) {} setViewer(null); }}>번호 변경</button></div> : (T.bizNote?.trim() && <div className="note">{T.bizNote}</div>)}
       </section>
     ),
 
@@ -444,7 +472,26 @@ export default function Home() {
         <div className="sechead"><h2>네트워킹</h2><span className="en">NETWORK</span></div>
         {T.netDesc?.trim() && <div className="desc">{T.netDesc}</div>}
         {!viewer ? (
-          <div className="tease">
+          <>
+            {/* ★ v62: 잠금 위 공개 훅 — 어떤 사람들이 있는지 살짝 보여주기 */}
+            {(() => {
+              const fixed = cfg.network.flatMap((g) => g.people || []);
+              const totalN = fixed.length + members.length;
+              const hooks = [...fixed, ...members.map((m) => ({ icon: m.icon || "🙋", job: m.job, desc: m.intro }))]
+                .filter((h) => (h.desc || "").trim()).slice(0, 3);
+              return (
+                <div className="tz-hooks">
+                  <b className="tz-big">현재 {totalN}명과 연결되어 있어요</b>
+                  {hooks.length > 0 && (
+                    <div className="tz-chips">
+                      {hooks.map((h, i) => <span className="hookchip" key={i}>{h.icon} {h.desc}</span>)}
+                    </div>
+                  )}
+                  <span className="tz-sub">구독하면 분야별로 구경하고, 소개도 받을 수 있어요</span>
+                </div>
+              );
+            })()}
+            <div className="tease">
             <div className="tease-blur" aria-hidden="true">
               {/* ★ v52: 카테고리 그리드 미리보기 */}
               <div className="catgrid">
@@ -460,7 +507,8 @@ export default function Home() {
               ))}
             </div>
             <div className="tease-gate"><Gate desc={T.netGateDesc} /></div>
-          </div>
+            </div>
+          </>
         ) : (() => {
           // ★ v52: 카테고리 3×2 그리드 — 클릭하면 해당 분야 사람들이 뜸.
           //   사람마다 "가까운 사이"(1~3촌) / "구독자"(4촌) 배지. 내부 촌수는 노출하지 않음.
@@ -612,6 +660,36 @@ export default function Home() {
       </div>
 
       {/* 구독자 인증(잠금해제) 모달 */}
+      {/* ★ v62 추천 모달 */}
+      {refOpen && viewer && (
+        <div className="modal-bg" onClick={(e) => e.target === e.currentTarget && setRefOpen(false)}>
+          <div className="modal">
+            <div className="sechead" style={{ border: "none", paddingBottom: 0, marginBottom: 6 }}>
+              <h2 style={{ fontSize: 17 }}>🍗 추천하고 치킨 받기</h2>
+              <span className="en" style={{ color: "var(--gold)" }}>REFERRAL</span>
+            </div>
+            <div className="desc">
+              아래 <b style={{ color: "var(--gold)" }}>내 추천 링크</b>로 친구가 구독하고 등록이 완료되면,
+              감사의 의미로 <b>BHC 치킨 기프티콘</b>을 보내드립니다! 인원 제한 없이 추천할 때마다 드려요.
+            </div>
+            <div className="fgroup">
+              <div className="flabel">내 추천 링크</div>
+              <input readOnly value={"https://sunghoon-nine.vercel.app/?ref=" + (viewer.refCode || "")} onFocus={(e) => e.target.select()} />
+            </div>
+            <div className="btnrow" style={{ marginTop: 14 }}>
+              <button className="mp" onClick={async () => {
+                const url = "https://sunghoon-nine.vercel.app/?ref=" + (viewer.refCode || "");
+                try {
+                  if (navigator.share) { await navigator.share({ title: "전성훈 — 레벨업 중인 창업가", url }); }
+                  else { await navigator.clipboard.writeText(url); toast("📋 추천 링크가 복사됐어요!"); }
+                } catch (e) { try { await navigator.clipboard.writeText(url); toast("📋 추천 링크가 복사됐어요!"); } catch (e2) {} }
+              }}>📤 공유하기 / 복사</button>
+              <button className="ghost" onClick={() => setRefOpen(false)}>닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ★ v51 내 소개 수정 모달 */}
       {me && (
         <div className="modal-bg" onClick={(e) => e.target === e.currentTarget && setMe(null)}>
@@ -708,7 +786,11 @@ export default function Home() {
                 <div style={{ fontSize: 13.5, color: "var(--dim)", marginTop: 6 }}>
                   등록이 끝나면 문자로 알려드릴게요.<br />그때부터 잠긴 칸도 번호로 열 수 있습니다.
                 </div>
-                <div style={{ marginTop: 18 }}><button onClick={() => setSubOpen(false)}>닫기</button></div>
+                <div style={{ fontSize: 13, color: "var(--gold)", marginTop: 14 }}>재밌으셨다면, 이 상태창을 주변에도 공유해주세요! 🙏</div>
+                <div className="btnrow" style={{ marginTop: 10, justifyContent: "center" }}>
+                  <button className="mp" onClick={shareLink}>📤 친구에게 공유</button>
+                  <button className="ghost" onClick={() => setSubOpen(false)}>닫기</button>
+                </div>
               </div>
             ) : (
               <>
@@ -750,6 +832,12 @@ export default function Home() {
                   <div className="flabel">생일 <span style={{ opacity: 0.6 }}>(선택 · 비공개 — 축하 인사만 드려요)</span></div>
                   <input value={form.birthday} inputMode="numeric" maxLength={5} placeholder="예: 0514"
                     onChange={(e) => setForm({ ...form, birthday: e.target.value })} />
+                </div>
+                <div className="fgroup">
+                  <div className="flabel">추천인 <span style={{ opacity: 0.6 }}>(선택 · 비공개 — 추천해주신 분께 감사 선물을 드려요 🍗)</span></div>
+                  <input value={form.refName} maxLength={20} placeholder="나를 추천해준 분 이름"
+                    onChange={(e) => setForm({ ...form, refName: e.target.value })} />
+                  {(() => { try { return localStorage.getItem("ref_code") ? <div className="note" style={{ marginTop: 4 }}>🎁 추천 링크로 접속하셨네요 — 추천인이 자동으로 연결됩니다!</div> : null; } catch (e) { return null; } })()}
                 </div>
                 <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
                   <button className="sm ghost" onClick={() => setSubOpen(false)}>닫기</button>

@@ -16,6 +16,14 @@ async function logSms(client, entry) {
   try { await client.from("sms_log").insert(entry); } catch (e) {}
 }
 
+// ★ v60: 구독자별 '문자 보냄' 이벤트 기록 (관심도 집계용). 테이블 없어도 발송은 안 막음.
+async function logSentEvents(client, subIds) {
+  try {
+    const ids = (subIds || []).filter(Boolean);
+    if (ids.length) await client.from("sms_events").insert(ids.map((id) => ({ sub_id: id, kind: "sent" })));
+  } catch (e) {}
+}
+
 // ★ v49: 솔라피 응답에서 사람이 읽을 요약 뽑기
 function smsDetail(r) {
   if (!r) return "";
@@ -50,6 +58,7 @@ export async function GET(req) {
     //    새 컬럼 SQL 미실행이면 조용히 기존(총계) 방식만 유지.
     let marketing = { enabled: false, cap };
     let vTotal = 0, vToday = 0, vQr = 0, vShare = 0;
+    const phoneVisitTimes = {}; // ★ v61: 번호별 방문 시각 (문자 반응 자동 계산용)
     {
       const { data: vr, error: ve } = await client
         .from("visits")
@@ -84,6 +93,9 @@ export async function GET(req) {
         // 구독자별 관심도: 인증(phone)된 방문을 구독자에 연결
         const byPhone = {};
         rows.forEach((r) => {
+          if (r.phone) (phoneVisitTimes[r.phone] = phoneVisitTimes[r.phone] || []).push(new Date(r.created_at).getTime());
+        });
+        rows.forEach((r) => {
           if (!r.phone) return;
           const p = byPhone[r.phone] || (byPhone[r.phone] = { visits: 0, dur: 0, last: null });
           p.visits += 1;
@@ -115,6 +127,33 @@ export async function GET(req) {
       const { data: lg, error: lgErr } = await client.from("sms_log").select("*").order("created_at", { ascending: false }).limit(30);
       if (lgErr) smsLogTableMissing = true;
       else smsLogs = lg || [];
+    }
+    // ★ v62: 추천 현황
+    let referrals = [];
+    let referralsTableMissing = false;
+    {
+      const { data: rf, error: re } = await client.from("referrals").select("*").order("id", { ascending: false }).limit(200);
+      if (re) referralsTableMissing = true;
+      else referrals = rf || [];
+    }
+    // ★ v61: 구독자별 문자 지표 — 전부 자동. sent(보낸 수) + reacted(문자 받고 48시간 내 사이트 방문한 수)
+    let smsStats = {};
+    let smsEventsTableMissing = false;
+    {
+      const { data: ev, error: ee } = await client.from("sms_events").select("sub_id,kind,created_at").order("id", { ascending: false }).limit(5000);
+      if (ee) smsEventsTableMissing = true;
+      else {
+        const digitsById = {};
+        list.forEach((x) => { digitsById[x.id] = x.phone_digits; });
+        (ev || []).forEach((r) => {
+          if (r.kind !== "sent") return; // 과거 reply 행은 무시
+          const st = smsStats[r.sub_id] || (smsStats[r.sub_id] = { sent: 0, reacted: 0 });
+          st.sent += 1;
+          const t0 = new Date(r.created_at).getTime();
+          const vts = phoneVisitTimes[digitsById[r.sub_id]] || [];
+          if (vts.some((t) => t >= t0 && t <= t0 + 48 * 3600 * 1000)) st.reacted += 1;
+        });
+      }
     }
     // ★ v54: 만남 기록 (최근 100건 + 전체 횟수)
     let meetings = [];
@@ -156,6 +195,10 @@ export async function GET(req) {
       meetings,
       meetCounts,
       meetingsTableMissing,
+      smsStats,
+      smsEventsTableMissing,
+      referrals,
+      referralsTableMissing,
     });
   } catch (e) {
     return NextResponse.json({ error: "server" }, { status: 500 });
@@ -216,6 +259,25 @@ export async function POST(req) {
       } catch (e) {}
       await logSms(client, { kind: "test", to_count: 1, targets: "…" + to.slice(-4), body: String(b.text || "[전성훈 상태창] 문자 연동 테스트입니다."), ok: !!r.ok, detail: smsDetail(r) });
       return NextResponse.json({ ok: !!r.ok, detail, raw: r.ok ? undefined : JSON.stringify(r.data || r.error || "").slice(0, 300) });
+    }
+
+    // ★ v62: 추천 쿠폰 지급 완료 표시
+    if (b.action === "ref_paid") {
+      const { error } = await client.from("referrals").update({ status: "paid", paid_at: new Date().toISOString() }).eq("id", b.id);
+      if (error) return NextResponse.json({ error: "db" }, { status: 500 });
+      return NextResponse.json({ ok: true });
+    }
+    // ★ v62: 추천인 수동 연결 (이름으로만 입력된 경우 어드민이 확정)
+    if (b.action === "ref_link") {
+      const referrerId = parseInt(b.referrer_id, 10);
+      const refereeId = parseInt(b.referee_id, 10);
+      if (!referrerId || !refereeId || referrerId === refereeId) return NextResponse.json({ error: "invalid" }, { status: 400 });
+      const { data: exist } = await client.from("referrals").select("id").eq("referee_id", refereeId).limit(1);
+      if (exist && exist.length) return NextResponse.json({ error: "dup" });
+      const { error } = await client.from("referrals").insert({ referrer_id: referrerId, referee_id: refereeId });
+      if (error) return NextResponse.json({ error: "db" }, { status: 500 });
+      await client.from("subscribers").update({ referrer_id: referrerId }).eq("id", refereeId);
+      return NextResponse.json({ ok: true });
     }
 
     // ★ v54: 만남 기록 추가 — 몇 번째 만남인지 자동 계산해서 반환
@@ -304,6 +366,7 @@ export async function POST(req) {
         } catch (e) {}
         return NextResponse.json({ ok: false, detail, raw: JSON.stringify(r.data || r.error || "").slice(0, 300) });
       }
+      await logSentEvents(client, targets.map((t) => t.id));
       return NextResponse.json({ ok: true, count: r.count, scheduled: scheduledDate ? b.at : null });
     }
 
@@ -343,7 +406,29 @@ export async function POST(req) {
 
     // 대기 → 승인으로 바뀐 순간, 환영 문자 자동 발송
     let sms = null;
+    let refBonus = false;
     if (before && !isApproved(before.approved) && patch.approved === true) {
+      // ★ v62: 추천 링크로 온 구독자면 → 추천 확정 + 추천인/사장님에게 자동 알림
+      try {
+        if (after && after.referrer_id) {
+          const { data: exist } = await client.from("referrals").select("id").eq("referee_id", b.id).limit(1);
+          if (!exist || !exist.length) {
+            const { error: rerr } = await client.from("referrals").insert({ referrer_id: after.referrer_id, referee_id: b.id });
+            if (!rerr) {
+              refBonus = true;
+              const { data: refr } = await client.from("subscribers").select("name,phone").eq("id", after.referrer_id).single();
+              if (refr) {
+                const rdg = String(refr.phone || "").replace(/\D/g, "");
+                // 추천인에게: 쿠폰 예고
+                if (rdg.length >= 10) await sendSMS(rdg, `${refr.name}님, 추천해주신 ${before.name}님의 등록이 완료됐어요! 감사의 의미로 BHC 치킨 기프티콘을 곧 보내드릴게요 🍗\n- 전성훈 드림`);
+                // 사장님(발신번호)에게: 지급 대상 알림
+                const owner = String(process.env.SOLAPI_SENDER || "").replace(/\D/g, "");
+                if (owner.length >= 10) await sendSMS(owner, `🎁 [추천 성공] ${refr.name}님이 ${before.name}님 추천 → 치킨 쿠폰 지급 대상! 어드민 → 🎁 추천 현황에서 확인`);
+              }
+            }
+          }
+        }
+      } catch (e) {}
       const dg = String(before.phone || "").replace(/\D/g, "");
       // ★ v57: 환영 문자 멘트를 어드민 설정에서 읽음 (단체문자 카드에서 수정 가능)
       let wt = mergeConfig(null).welcomeSms;
@@ -356,9 +441,12 @@ export async function POST(req) {
       if (!wmsg.includes("sunghoon-nine.vercel.app")) wmsg += "\n\n사이트방문:\n" + SITE;
       wmsg += "\n\n구독 취소:\n" + SITE + "/bye?p=" + dg + "&t=" + unsubToken(dg);
       sms = await sendSMS(dg, wmsg);
-      if (!sms.skipped) await logSms(client, { kind: "welcome", to_count: 1, targets: (before.name || "") + " …" + dg.slice(-4), body: "환영 문자 (등록 완료 안내)", ok: !!sms.ok, detail: smsDetail(sms) });
+      if (!sms.skipped) {
+        await logSms(client, { kind: "welcome", to_count: 1, targets: (before.name || "") + " …" + dg.slice(-4), body: "환영 문자 (등록 완료 안내)", ok: !!sms.ok, detail: smsDetail(sms) });
+        if (sms.ok) await logSentEvents(client, [b.id]);
+      }
     }
-    return NextResponse.json({ ok: true, smsSent: sms ? !sms.skipped : false, row: after ? { id: after.id, chon: parseInt(after.chon, 10) || 4, approved: isApproved(after.approved), name: after.name || "", job: after.job || "", intro: after.intro || "" } : null });
+    return NextResponse.json({ ok: true, smsSent: sms ? !sms.skipped : false, refBonus, row: after ? { id: after.id, chon: parseInt(after.chon, 10) || 4, approved: isApproved(after.approved), name: after.name || "", job: after.job || "", intro: after.intro || "" } : null });
   } catch (e) {
     return NextResponse.json({ error: "server" }, { status: 500 });
   }
