@@ -663,7 +663,7 @@ export default function Home() {
             </div>
             <div className="desc">{T.unlockDesc}</div>
             <div className="fgroup">
-              <div className="flabel">전화번호</div>
+              <div className="flabel">전화번호 <span style={{ opacity: 0.6 }}>(비공개 · 인증용으로만 사용)</span></div>
               <input value={uPhone} inputMode="tel" placeholder="010-0000-0000"
                 onChange={(e) => setUPhone(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && !uBusy && doUnlock()} />
