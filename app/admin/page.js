@@ -119,6 +119,51 @@ export default function Admin() {
     };
   }, [authed]);
 
+  // ★ v54: 만남 기록 & 후속 문자
+  const [mtSub, setMtSub] = useState("");     // 만남 기록할 구독자 id
+  const [mtNote, setMtNote] = useState("");   // 특이사항
+  const [mtMsg, setMtMsg] = useState("");
+  const [fuIds, setFuIds] = useState([]);     // 후속 문자 대상 id 목록
+  const [fuText, setFuText] = useState("");   // 후속 문자 내용
+  const [fuTpl, setFuTpl] = useState("");     // 선택된 템플릿 이름
+  const [fuMsg, setFuMsg] = useState("");
+  const [fuBusy, setFuBusy] = useState(false);
+  async function meetAdd() {
+    const id = parseInt(mtSub, 10);
+    if (!id) return;
+    setMtMsg("기록중...");
+    try {
+      const r = await post({ action: "meet_add", sub_id: id, note: mtNote.trim() });
+      if (r.ok) {
+        const nm = (data?.subscribers || []).find((x) => x.id === id)?.name || "";
+        setMtMsg("ok:" + nm + "님 " + r.nth + "번째 만남 기록됨 — 아래 후속 문자 대상에 자동 추가");
+        setMtNote("");
+        setFuIds((p) => (p.includes(id) ? p : [...p, id]));
+        load(key);
+      } else setMtMsg("err:" + (r.detail || "기록 실패 — 만남 테이블 SQL 실행 여부를 확인해주세요"));
+    } catch (e) { setMtMsg("err:네트워크 오류"); }
+  }
+  async function meetNote(id, note) {
+    try { await post({ action: "meet_note", id, note }); load(key); } catch (e) {}
+  }
+  async function meetDel(id) {
+    if (!confirm("이 만남 기록을 삭제할까요? (횟수 카운트도 줄어듭니다)")) return;
+    try { await post({ action: "meet_del", id }); load(key); } catch (e) {}
+  }
+  async function sendFollowup() {
+    if (!fuText.trim() || fuIds.length === 0) return;
+    const names = fuIds.map((id) => (data?.subscribers || []).find((x) => x.id === id)?.name || "?").join(", ");
+    if (!confirm(`${fuIds.length}명(${names})에게 후속 문자를 보냅니다.\n[이름]·[횟수]는 각자에 맞게 바뀌고, 사이트·구독취소 링크가 자동으로 붙습니다. 진행할까요?`)) return;
+    setFuBusy(true); setFuMsg("발송중...");
+    try {
+      const r = await post({ action: "broadcast", text: fuText.trim(), ids: fuIds });
+      if (r.ok) { setFuMsg(`✓ ${r.count}명에게 발송 완료`); setFuIds([]); }
+      else if (r.error === "no_sms") setFuMsg("❌ Solapi 환경변수가 설정되지 않았습니다.");
+      else setFuMsg("❌ 발송 실패 — " + (r.detail || "") + (r.raw ? " · " + r.raw : ""));
+    } catch (e) { setFuMsg("❌ 네트워크 오류"); }
+    setFuBusy(false);
+  }
+
   // ★ v50: 평균 체류시간 계산 상한(초) — 한 명이 오래 켜놔도 평균이 안 튀게. 조절 가능.
   const [mktCap, setMktCap] = useState(180);
   const mktCapRef = useRef(180);
@@ -651,6 +696,131 @@ alter table visits add column if not exists is_admin boolean default false;`}</p
             );
           })()}
 
+          {/* ★ v54 만남 기록 & 후속 문자 */}
+          {(() => {
+            const kToday = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+            const subById = (id) => (data.subscribers || []).find((x) => x.id === id);
+            const todayMeets = (data.meetings || []).filter((m) => String(m.met_on).slice(0, 10) === kToday);
+            const tpls = (cfg?.smsTemplates || []);
+            const firstTarget = fuIds.length ? subById(fuIds[0]) : null;
+            const previewText = firstTarget
+              ? fuText.replace(/\[이름\]/g, firstTarget.name || "구독자").replace(/\[횟수\]/g, (data.meetCounts?.[firstTarget.id] || 0) ? data.meetCounts[firstTarget.id] + "번째" : "이번")
+              : "";
+            return (
+              <div className="card">
+                <div className="sechead"><h2>🤝 만남 & 후속 문자</h2><span className="en">FOLLOW-UP</span></div>
+                {data.meetingsTableMissing && (
+                  <div className="adm-msg" style={{ textAlign: "left", color: "#ff9f43", paddingTop: 0 }}>
+                    ⚠️ 만남 테이블이 아직 없습니다. Supabase → SQL Editor에서 1회 실행 (zip의 supabase/만남기록_테이블.sql):
+                    <pre style={{ whiteSpace: "pre-wrap", fontSize: 11, background: "rgba(255,255,255,.06)", padding: 8, borderRadius: 6, marginTop: 6 }}>{`create table if not exists meetings (
+  id bigint generated always as identity primary key,
+  created_at timestamptz not null default now(),
+  sub_id bigint not null, met_on date not null, note text
+);
+alter table meetings enable row level security;`}</pre>
+                  </div>
+                )}
+                {/* A. 오늘 만남 기록 */}
+                <div className="flabel">1) 오늘 만난 사람 기록 — 기록하면 몇 번째 만남인지 자동으로 셉니다</div>
+                <div className="ed-row" style={{ flexWrap: "wrap", marginBottom: 6 }}>
+                  <select style={{ minWidth: 150 }} value={mtSub} onChange={(e) => setMtSub(e.target.value)}>
+                    <option value="">누구를 만났나요?</option>
+                    {(data.subscribers || []).map((x) => (
+                      <option key={x.id} value={x.id}>{x.name} ({x.job || "직업 미입력"}){data.meetCounts?.[x.id] ? " · " + data.meetCounts[x.id] + "회" : ""}</option>
+                    ))}
+                  </select>
+                  <input style={{ flex: 1, minWidth: 140 }} value={mtNote} maxLength={200} placeholder="특이사항 (예: 골프 좋아함, 다음에 소개 약속)"
+                    onChange={(e) => setMtNote(e.target.value)} />
+                  <button className="sm" disabled={!mtSub} onClick={meetAdd}>+ 만남 기록</button>
+                </div>
+                {mtMsg && (
+                  <div className="adm-msg" style={{ padding: "0 0 8px", textAlign: "left" }}>
+                    <b style={{ color: mtMsg.startsWith("ok:") ? "var(--hp)" : "var(--red)" }}>{mtMsg.startsWith("ok:") ? "✓ " : "❌ "}{mtMsg.slice(mtMsg.indexOf(":") + 1)}</b>
+                  </div>
+                )}
+                {/* B. 최근 만남 목록 */}
+                {(data.meetings || []).length > 0 && (
+                  <details style={{ marginBottom: 12 }} open={todayMeets.length > 0}>
+                    <summary style={{ cursor: "pointer", fontSize: 13, color: "var(--dim)" }}>📒 최근 만남 기록 {data.meetings.length}건 (오늘 {todayMeets.length}건)</summary>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+                      {(data.meetings || []).slice(0, 30).map((m) => {
+                        const sub = subById(m.sub_id);
+                        const isToday = String(m.met_on).slice(0, 10) === kToday;
+                        return (
+                          <div key={m.id} style={{ border: "1px solid " + (isToday ? "var(--gold)" : "rgba(255,255,255,.12)"), borderRadius: 8, padding: "7px 9px", fontSize: 13, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                            <span style={{ color: isToday ? "var(--gold)" : "var(--dim)" }}>{String(m.met_on).slice(5, 10)}{isToday ? " 오늘" : ""}</span>
+                            <b>{sub?.name || "삭제된 구독자"}</b>
+                            <input style={{ flex: 1, minWidth: 120, fontSize: 12, padding: "4px 6px" }} defaultValue={m.note || ""} placeholder="특이사항 메모"
+                              onBlur={(e) => e.target.value !== (m.note || "") && meetNote(m.id, e.target.value)} />
+                            <button className="sm ghost" style={{ color: "#ff8f8f" }} onClick={() => meetDel(m.id)}>✕</button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="adm-msg" style={{ padding: "6px 0 0", textAlign: "left", opacity: 0.7 }}>메모는 칸을 벗어나면 자동 저장됩니다.</div>
+                  </details>
+                )}
+                {/* C. 후속 문자 */}
+                <div className="flabel">2) 후속 문자 보내기 — 만났으면 무조건 후속 문자! 대상 선택 → 템플릿 → 수정 → 발송</div>
+                <div className="ed-row" style={{ flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                  {todayMeets.length > 0 && (
+                    <button className="sm ghost" onClick={() => setFuIds([...new Set(todayMeets.map((m) => m.sub_id))])}>☀️ 오늘 만난 {new Set(todayMeets.map((m) => m.sub_id)).size}명 모두 선택</button>
+                  )}
+                  <select value="" onChange={(e) => { const id = parseInt(e.target.value, 10); if (id) setFuIds((p) => (p.includes(id) ? p : [...p, id])); }}>
+                    <option value="">+ 사람 추가</option>
+                    {(data.subscribers || []).filter((x) => !fuIds.includes(x.id)).map((x) => (
+                      <option key={x.id} value={x.id}>{x.name} ({x.job || ""})</option>
+                    ))}
+                  </select>
+                </div>
+                {fuIds.length > 0 && (
+                  <div className="ed-row" style={{ flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                    {fuIds.map((id) => {
+                      const x = subById(id);
+                      return (
+                        <button key={id} className="sm" title="눌러서 제외" onClick={() => setFuIds((p) => p.filter((v) => v !== id))}>
+                          {x?.icon || "🙋"} {x?.name || "?"}{data.meetCounts?.[id] ? " · " + data.meetCounts[id] + "회" : ""} ✕
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="ed-row" style={{ flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
+                  <span className="adm-msg" style={{ padding: 0 }}>템플릿:</span>
+                  {tpls.map((t) => (
+                    <button key={t.name} className={"sm " + (fuTpl === t.name ? "" : "ghost")}
+                      onClick={() => { setFuTpl(t.name); setFuText(t.text); }}>{t.name}</button>
+                  ))}
+                </div>
+                <textarea rows={4} value={fuText} maxLength={1000} style={{ resize: "vertical" }}
+                  placeholder="템플릿을 고르거나 직접 작성하세요. [이름]·[횟수]는 사람마다 자동으로 바뀝니다."
+                  onChange={(e) => setFuText(e.target.value)} />
+                {fuTpl && fuText.trim() && (
+                  <div className="ed-row" style={{ marginTop: 6 }}>
+                    <button className="sm ghost" onClick={() => {
+                      updateCfg({ ...cfg, smsTemplates: tpls.map((t) => (t.name === fuTpl ? { ...t, text: fuText } : t)) });
+                      setFuMsg("💾 \"" + fuTpl + "\" 템플릿에 저장됨 (자동 저장)");
+                    }}>💾 이 내용을 "{fuTpl}" 템플릿으로 저장</button>
+                  </div>
+                )}
+                {previewText && (
+                  <div className="adm-msg" style={{ padding: "8px 0 0", textAlign: "left" }}>
+                    미리보기 ({firstTarget.name}님에게): "{previewText}"
+                  </div>
+                )}
+                <div className="adm-msg" style={{ padding: "6px 0 0", textAlign: "left", opacity: 0.75 }}>
+                  모든 문자 끝에 "사이트방문:" / "구독 취소:" 링크가 자동으로 붙습니다. 대기중인 사람에게도 발송됩니다.
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
+                  <span className="adm-msg" style={{ padding: 0 }}>{fuMsg}</span>
+                  <button className="sm" disabled={fuBusy || !fuText.trim() || fuIds.length === 0} onClick={sendFollowup}>
+                    {fuBusy ? "발송중..." : `${fuIds.length}명에게 발송`}
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* 구독자 관리 */}
           <div className="card">
             <div className="toolbar">
@@ -1172,7 +1342,7 @@ alter table sms_log enable row level security;`}</pre>
                   <div key={l.id} style={{ border: "1px solid rgba(255,255,255,.12)", borderRadius: 8, padding: "8px 10px", fontSize: 13, lineHeight: 1.5 }}>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                       <b style={{ color: l.ok ? "#2ecc71" : "#ff6b6b" }}>{l.ok ? "✓ 성공" : "❌ 실패"}</b>
-                      <span style={{ color: "var(--gold)" }}>{l.kind === "broadcast" ? "단체" : l.kind === "welcome" ? "환영" : "테스트"}</span>
+                      <span style={{ color: "var(--gold)" }}>{l.kind === "broadcast" ? "단체" : l.kind === "welcome" ? "환영" : l.kind === "followup" ? "후속" : "테스트"}</span>
                       <span>{l.targets || ""}</span>
                       {l.scheduled_at && <span>⏰ 예약 {l.scheduled_at.replace("T", " ")}</span>}
                       <span className="time" style={{ opacity: 0.7 }}>{fmtKST(l.created_at)}</span>

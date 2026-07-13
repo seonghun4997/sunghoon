@@ -109,6 +109,19 @@ export async function GET(req) {
       if (lgErr) smsLogTableMissing = true;
       else smsLogs = lg || [];
     }
+    // ★ v54: 만남 기록 (최근 100건 + 전체 횟수)
+    let meetings = [];
+    let meetCounts = {};
+    let meetingsTableMissing = false;
+    {
+      const { data: mr, error: me } = await client.from("meetings").select("*").order("met_on", { ascending: false }).order("id", { ascending: false }).limit(100);
+      if (me) meetingsTableMissing = true;
+      else {
+        meetings = mr || [];
+        const { data: allm } = await client.from("meetings").select("sub_id");
+        (allm || []).forEach((r) => { meetCounts[r.sub_id] = (meetCounts[r.sub_id] || 0) + 1; });
+      }
+    }
     const total = vTotal;
     const qr = vQr;
     const share = vShare;
@@ -133,6 +146,9 @@ export async function GET(req) {
       smsLogs: smsLogs || [],
       smsLogTableMissing,
       marketing,
+      meetings,
+      meetCounts,
+      meetingsTableMissing,
     });
   } catch (e) {
     return NextResponse.json({ error: "server" }, { status: 500 });
@@ -195,6 +211,31 @@ export async function POST(req) {
       return NextResponse.json({ ok: !!r.ok, detail, raw: r.ok ? undefined : JSON.stringify(r.data || r.error || "").slice(0, 300) });
     }
 
+    // ★ v54: 만남 기록 추가 — 몇 번째 만남인지 자동 계산해서 반환
+    if (b.action === "meet_add") {
+      const subId = parseInt(b.sub_id, 10);
+      if (!subId) return NextResponse.json({ error: "invalid" }, { status: 400 });
+      let metOn = String(b.met_on || "").trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(metOn)) metOn = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10); // 오늘(KST)
+      const note = String(b.note || "").trim().slice(0, 200) || null;
+      const { error } = await client.from("meetings").insert({ sub_id: subId, met_on: metOn, note });
+      if (error) return NextResponse.json({ error: "db", detail: String(error.message || "").slice(0, 120) }, { status: 500 });
+      const { count } = await client.from("meetings").select("*", { count: "exact", head: true }).eq("sub_id", subId);
+      return NextResponse.json({ ok: true, nth: count || 1 });
+    }
+    // ★ v54: 만남 메모 수정
+    if (b.action === "meet_note") {
+      const { error } = await client.from("meetings").update({ note: String(b.note || "").trim().slice(0, 200) || null }).eq("id", b.id);
+      if (error) return NextResponse.json({ error: "db" }, { status: 500 });
+      return NextResponse.json({ ok: true });
+    }
+    // ★ v54: 만남 기록 삭제
+    if (b.action === "meet_del") {
+      const { error } = await client.from("meetings").delete().eq("id", b.id);
+      if (error) return NextResponse.json({ error: "db" }, { status: 500 });
+      return NextResponse.json({ ok: true });
+    }
+
     // 구독자 삭제
     if (b.action === "delsub") {
       const { error } = await client.from("subscribers").delete().eq("id", b.id);
@@ -207,9 +248,18 @@ export async function POST(req) {
       const text = String(b.text || "").trim();
       if (!text) return NextResponse.json({ error: "invalid" }, { status: 400 });
       const chons = Array.isArray(b.chons) && b.chons.length ? b.chons.map((n) => parseInt(n, 10)) : [1, 2, 3, 4];
-      const { data } = await client.from("subscribers").select("name,phone_digits,chon,approved");
-      const targets = (data || []).filter((s) => isApproved(s.approved) && chons.includes(parseInt(s.chon, 10) || 4));
+      const { data } = await client.from("subscribers").select("id,name,phone_digits,chon,approved");
+      // ★ v54: ids가 오면 그 사람들에게만(후속 문자 — 대기중이어도 발송 가능), 아니면 기존 촌수 기준
+      const targets = Array.isArray(b.ids) && b.ids.length
+        ? (data || []).filter((s) => b.ids.includes(s.id))
+        : (data || []).filter((s) => isApproved(s.approved) && chons.includes(parseInt(s.chon, 10) || 4));
       if (targets.length === 0) return NextResponse.json({ error: "no_target" });
+      // ★ v54: [횟수] 치환용 만남 카운트
+      let mCounts = {};
+      if (text.includes("[횟수]")) {
+        const { data: mm } = await client.from("meetings").select("sub_id");
+        (mm || []).forEach((r) => { mCounts[r.sub_id] = (mCounts[r.sub_id] || 0) + 1; });
+      }
       // ★ v48 예약 발송: b.at = "YYYY-MM-DDTHH:mm" (한국시간). 현재+1분 이후만 허용.
       let scheduledDate = null;
       if (b.at) {
@@ -221,6 +271,7 @@ export async function POST(req) {
       }
       const messages = targets.map((t) => {
         let msg = text.replace(/\[이름\]/g, t.name || "구독자");
+        msg = msg.replace(/\[횟수\]/g, mCounts[t.id] ? mCounts[t.id] + "번째" : "이번");
         // ★ v50: 링크를 라벨과 함께 명확히 분리해서 첨부
         if (!msg.includes("sunghoon-nine.vercel.app")) msg += "\n\n사이트방문:\n" + SITE;
         msg += "\n\n구독 취소:\n" + SITE + "/bye?p=" + t.phone_digits + "&t=" + unsubToken(t.phone_digits);
@@ -229,9 +280,9 @@ export async function POST(req) {
       const r = await sendSMS(messages, "", scheduledDate ? { scheduledDate } : {});
       if (r.skipped) return NextResponse.json({ error: "no_sms" });
       await logSms(client, {
-        kind: "broadcast",
+        kind: Array.isArray(b.ids) && b.ids.length ? "followup" : "broadcast",
         to_count: targets.length,
-        targets: chons.slice().sort().join("·") + "촌 " + targets.length + "명",
+        targets: (Array.isArray(b.ids) && b.ids.length ? "후속 " : chons.slice().sort().join("·") + "촌 ") + targets.length + "명",
         body: text,
         scheduled_at: b.at || null,
         ok: !!r.ok,
