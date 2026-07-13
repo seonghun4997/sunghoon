@@ -567,9 +567,37 @@ export default function Admin() {
         </div>
       ) : (
         <>
+          {/* ★ v66: 상단 고정 퀵 메뉴 — 원하는 카드로 바로 점프 */}
+          <div className="admnav">
+            {[
+              ["#adm-metrics", "📊 지표"],
+              ["#adm-eng", "🔥 관심도"],
+              ["#adm-subs", "👥 구독자", data.pending],
+              ["#adm-meet", "🤝 만남"],
+              ["#adm-sms", "✉️ 문자"],
+              ["#adm-editor", "✍️ 편집기"],
+              ["#adm-bday", "🎂 생일"],
+              ["#adm-ref", "🎁 추천"],
+              ["#adm-smslog", "📒 내역"],
+              ["#adm-notes", "📝 패치"],
+            ].map(([href, label, badge]) => (
+              <a key={href} href={href} className="admnav-pill">
+                {label}
+                {badge > 0 && <b className="admnav-badge">{badge}</b>}
+              </a>
+            ))}
+          </div>
+
+          {/* ★ v66: 승인 대기 알림 배너 — 제일 자주 하는 일을 맨 위에 */}
+          {data.pending > 0 && (
+            <a href="#adm-subs" className="pending-banner" onClick={() => setSubFilter("pending")}>
+              🔔 <b>승인 대기 {data.pending}명</b> — 눌러서 바로 확인하기 →
+            </a>
+          )}
+
           {/* 지표 */}
           <div className="card">
-            <div className="sechead"><h2>퍼포먼스</h2><span className="en">METRICS</span></div>
+            <div className="sechead" id="adm-metrics"><h2>퍼포먼스</h2><span className="en">METRICS</span></div>
             <div className="metrics">
               <div className="mcard">
                 <div className="k">총 방문</div>
@@ -654,7 +682,7 @@ alter table visits add column if not exists is_admin boolean default false;`}</p
             const gColor = { S: "var(--gold)", A: "var(--hp)", B: "var(--mp)", C: "var(--dim)", D: "var(--dim)" };
             return (
               <div className="card">
-                <div className="sechead"><h2>구독자 관심도</h2><span className="en">ENGAGEMENT</span></div>
+                <div className="sechead" id="adm-eng"><h2>구독자 관심도</h2><span className="en">ENGAGEMENT</span></div>
                 {data.smsEventsTableMissing && (
                   <div className="adm-msg" style={{ textAlign: "left", color: "#ff9f43", paddingTop: 0 }}>
                     ⚠️ 문자 반응 추적을 켜려면 Supabase → SQL Editor에서 1회 실행 (zip의 supabase/문자이벤트_테이블.sql):
@@ -735,7 +763,7 @@ alter table sms_events enable row level security;`}</pre>
             );
             return (
               <div className="card">
-                <div className="sechead"><h2>🎂 생일 임박</h2><span className="en">BIRTHDAYS</span></div>
+                <div className="sechead" id="adm-bday"><h2>🎂 생일 임박</h2><span className="en">BIRTHDAYS</span></div>
                 {list.length === 0 ? (
                   <div className="adm-msg" style={{ textAlign: "left", padding: 0 }}>
                     30일 이내 생일인 구독자가 없습니다. 생일은 구독 신청 시(선택) 또는 아래 구독자 카드의 "생일 MM-DD" 칸으로 입력됩니다.
@@ -770,7 +798,7 @@ alter table sms_events enable row level security;`}</pre>
             refs.forEach((r) => { refCount[r.referrer_id] = (refCount[r.referrer_id] || 0) + 1; });
             return (
               <div className="card">
-                <div className="sechead"><h2>🎁 추천 현황</h2><span className="en">REFERRAL</span>
+                <div className="sechead" id="adm-ref"><h2>🎁 추천 현황</h2><span className="en">REFERRAL</span>
                   {pending.length > 0 && <span style={{ marginLeft: "auto", color: "var(--red)", fontWeight: 800, fontSize: 13 }}>🍗 지급 대기 {pending.length}건</span>}
                 </div>
                 {data.referralsTableMissing && (
@@ -849,7 +877,7 @@ alter table referrals enable row level security;`}</pre>
             const firstTarget = fuIds.length ? subById(fuIds[0]) : null;
             return (
               <div className="card">
-                <div className="sechead"><h2>🤝 만남 & 후속 문자</h2><span className="en">FOLLOW-UP</span></div>
+                <div className="sechead" id="adm-meet"><h2>🤝 만남 & 후속 문자</h2><span className="en">FOLLOW-UP</span></div>
                 {data.meetingsTableMissing && (
                   <div className="adm-msg" style={{ textAlign: "left", color: "#ff9f43", paddingTop: 0 }}>
                     ⚠️ 만남 테이블이 아직 없습니다. Supabase → SQL Editor에서 1회 실행 (zip의 supabase/만남기록_테이블.sql):
@@ -998,7 +1026,7 @@ alter table meetings enable row level security;`}</pre>
           {/* 구독자 관리 */}
           <div className="card">
             <div className="toolbar">
-              <div className="sechead" style={{ border: "none", padding: 0, margin: 0 }}>
+              <div className="sechead" id="adm-subs" style={{ border: "none", padding: 0, margin: 0 }}>
                 <h2>구독자 관리</h2><span className="en">SUBSCRIBERS</span>
               </div>
               <button className="sm" onClick={() => load(key, true)}>새로고침</button>
@@ -1100,7 +1128,7 @@ alter table meetings enable row level security;`}</pre>
 
           {/* 패치노트 관리 */}
           <div className="card">
-            <div className="sechead"><h2>패치노트</h2><span className="en">PATCH NOTES</span></div>
+            <div className="sechead" id="adm-notes"><h2>패치노트</h2><span className="en">PATCH NOTES</span></div>
             <div className="fgroup">
               <div className="flabel">버전 (예: v1.2)</div>
               <input value={noteVer} maxLength={20} placeholder="v1.0" onChange={(e) => setNoteVer(e.target.value)} />
@@ -1128,7 +1156,7 @@ alter table meetings enable row level security;`}</pre>
             <div className="card">
               <div className="toolbar">
                 <div className="sechead" style={{ border: "none", padding: 0, margin: 0 }}>
-                  <h2>사이트 편집기</h2><span className="en">EDITOR</span>
+                  <h2 id="adm-editor">사이트 편집기</h2><span className="en">EDITOR</span>
                 </div>
                 <button className="sm" onClick={saveConfig}>저장 &amp; 반영</button>
               </div>
@@ -1443,7 +1471,7 @@ alter table meetings enable row level security;`}</pre>
 
           {/* 단체 문자 */}
           <div className="card">
-            <div className="sechead"><h2>단체 문자</h2><span className="en">BROADCAST</span></div>
+            <div className="sechead" id="adm-sms"><h2>단체 문자</h2><span className="en">BROADCAST</span></div>
             <div className="adm-msg" style={{ padding: "0 0 12px", textAlign: "left" }}>
               {data.smsReady
                 ? "🟢 솔라피 연결됨 — 승인된 구독자 전원에게 발송됩니다. 사업 소식·인맥 업데이트 알림용."
@@ -1533,7 +1561,7 @@ alter table meetings enable row level security;`}</pre>
 
           {/* ★ v49 문자 발송 내역 */}
           <div className="card">
-            <div className="sechead"><h2>문자 발송 내역</h2><span className="en">SMS LOG</span></div>
+            <div className="sechead" id="adm-smslog"><h2>문자 발송 내역</h2><span className="en">SMS LOG</span></div>
             {data.smsLogTableMissing ? (
               <div className="adm-msg" style={{ padding: "0 0 8px", textAlign: "left", color: "#ff9f43" }}>
                 ⚠️ 내역 테이블이 아직 없습니다. Supabase → SQL Editor에서 아래 한 번만 실행해주세요 (zip의 supabase/문자내역_테이블.sql과 동일):
