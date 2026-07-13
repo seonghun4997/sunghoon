@@ -420,10 +420,10 @@ export async function POST(req) {
               if (refr) {
                 const rdg = String(refr.phone || "").replace(/\D/g, "");
                 // 추천인에게: 쿠폰 예고
-                if (rdg.length >= 10) await sendSMS(rdg, `${refr.name}님, 추천해주신 ${before.name}님의 등록이 완료됐어요! 감사의 의미로 BHC 치킨 기프티콘을 곧 보내드릴게요 🍗\n- 전성훈 드림`);
+                if (rdg.length >= 10) await sendSMS(rdg, `${refr.name}님, 추천해주신 ${before.name}님의 등록이 완료됐어요! 좋은 분 소개 정말 감사합니다 🙏\n- 전성훈 드림`);
                 // 사장님(발신번호)에게: 지급 대상 알림
                 const owner = String(process.env.SOLAPI_SENDER || "").replace(/\D/g, "");
-                if (owner.length >= 10) await sendSMS(owner, `🎁 [추천 성공] ${refr.name}님이 ${before.name}님 추천 → 치킨 쿠폰 지급 대상! 어드민 → 🎁 추천 현황에서 확인`);
+                if (owner.length >= 10) await sendSMS(owner, `🎁 [추천 성공] ${refr.name}님이 ${before.name}님을 추천했습니다. 어드민 → 🎁 추천 현황에서 확인`);
               }
             }
           }

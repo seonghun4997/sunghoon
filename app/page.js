@@ -268,7 +268,8 @@ export default function Home() {
     const url = location.origin + "/?src=share";
     if (navigator.share) {
       try {
-        await navigator.share({ title: T.name + " — " + T.subtitle, text: "『앗! 야생의 " + T.name + "이 나타났다!』 " + cfg.biz.length + "개 사업을 굴리는 창업가의 RPG 상태창 — 포획해보세요 🎯", url });
+        const bizN = cfg.biz.reduce((a, b2) => { const m = String(b2.tag || "").match(/(\d+)\s*개/); return a + (m ? parseInt(m[1], 10) : 1); }, 0);
+        await navigator.share({ title: T.name + " — " + T.subtitle, text: "『앗! 야생의 " + T.name + "이 나타났다!』 " + bizN + "개 사업을 굴리는 창업가의 RPG 상태창 — 포획해보세요 🎯", url });
       } catch (e) {}
     } else {
       try { await navigator.clipboard.writeText(url); toast("링크가 복사됐습니다!"); }
@@ -401,11 +402,19 @@ export default function Home() {
         {!viewer ? (
           <>
             {/* ★ v62: 잠금 위 공개 훅 — 궁금하게 만들기 */}
-            <div className="tz-hooks">
-              <span className="tz-icons">{cfg.biz.map((b) => b.icon).join(" ")}</span>
-              <b className="tz-big">{cfg.biz.length}개 사업 동시 운영 중</b>
-              <span className="tz-sub">{cfg.biz.filter((b) => b.stage === "고도화" || b.stage === "확장").length}개 고도화 · {cfg.biz.filter((b) => b.stage === "초기" || b.stage === "성장").length}개 신규 확장</span>
-            </div>
+            {(() => {
+              // ★ v64: 사업 개수 = 각 줄 태그의 "N개" 합산 (예: 헬스케어 3개 + 뷰티 1개 + ... = 8개)
+              const cnt = (b2) => { const m = String(b2.tag || "").match(/(\d+)\s*개/); return m ? parseInt(m[1], 10) : 1; };
+              const total = cfg.biz.reduce((a, b2) => a + cnt(b2), 0);
+              const adv = cfg.biz.filter((b2) => b2.stage === "고도화" || b2.stage === "확장").reduce((a, b2) => a + cnt(b2), 0);
+              return (
+                <div className="tz-hooks">
+                  <span className="tz-icons">{cfg.biz.map((b2) => b2.icon).join(" ")}</span>
+                  <b className="tz-big">{total}개 사업 동시 운영 중</b>
+                  <span className="tz-sub">{adv}개 고도화 · {total - adv}개 신규 확장</span>
+                </div>
+              );
+            })()}
             <div className="tease">
               <div className="tease-blur" aria-hidden="true">
                 {cfg.biz.slice(0, 4).map((b, i) => (
@@ -434,7 +443,7 @@ export default function Home() {
             )}
           </div>
         ))}
-        {viewer ? <div className="note">🔓 구독자로 인증됨{viewer.chon >= 4 ? " — 상세 설명은 가까운 사이(3회 이상 만남)부터" : ""} · <button className="linklike" onClick={() => setRefOpen(true)}>🎁 추천하고 치킨 받기</button> · <button className="linklike" onClick={openMe}>✏️ 내 소개 수정</button> · <button className="linklike" onClick={() => { try { localStorage.removeItem("viewer_phone"); } catch (e) {} setViewer(null); }}>번호 변경</button></div> : (T.bizNote?.trim() && <div className="note">{T.bizNote}</div>)}
+        {viewer ? <div className="note">🔓 구독자로 인증됨{viewer.chon >= 4 ? " — 상세 설명은 가까운 사이(3회 이상 만남)부터" : ""} · <button className="linklike" onClick={() => setRefOpen(true)}>🎁 친구 추천하기</button> · <button className="linklike" onClick={openMe}>✏️ 내 소개 수정</button> · <button className="linklike" onClick={() => { try { localStorage.removeItem("viewer_phone"); } catch (e) {} setViewer(null); }}>번호 변경</button></div> : (T.bizNote?.trim() && <div className="note">{T.bizNote}</div>)}
       </section>
     ),
 
@@ -668,12 +677,12 @@ export default function Home() {
         <div className="modal-bg" onClick={(e) => e.target === e.currentTarget && setRefOpen(false)}>
           <div className="modal">
             <div className="sechead" style={{ border: "none", paddingBottom: 0, marginBottom: 6 }}>
-              <h2 style={{ fontSize: 17 }}>🍗 추천하고 치킨 받기</h2>
+              <h2 style={{ fontSize: 17 }}>🎁 친구 추천하기</h2>
               <span className="en" style={{ color: "var(--gold)" }}>REFERRAL</span>
             </div>
             <div className="desc">
-              아래 <b style={{ color: "var(--gold)" }}>내 추천 링크</b>로 친구가 구독하고 등록이 완료되면,
-              감사의 의미로 <b>BHC 치킨 기프티콘</b>을 보내드립니다! 인원 제한 없이 추천할 때마다 드려요.
+              아래 <b style={{ color: "var(--gold)" }}>내 추천 링크</b>로 친구가 구독하면 추천인으로 자동 연결됩니다.
+              좋은 분 소개는 언제나 큰 힘이 돼요 🙏
             </div>
             <div className="fgroup">
               <div className="flabel">내 추천 링크</div>
@@ -842,8 +851,8 @@ export default function Home() {
                       onChange={(e) => setForm({ ...form, intro: e.target.value })} />
                   </div>
                   <div className="fgroup">
-                    <div className="flabel">추천인 / 알게 된 계기 <span style={{ opacity: 0.6 }}>(선택·비공개 — 추천해주신 분께 감사 선물 🍗)</span></div>
-                    <input value={form.refName} maxLength={40} placeholder="예: 김도은 소개 · 명함 QR · 인스타"
+                    <div className="flabel">추천인 / 알게 된 계기 <span style={{ opacity: 0.6 }}>(선택 · 비공개)</span></div>
+                    <input value={form.refName} maxLength={40} placeholder="예: 김철수 소개 · 명함 QR · 인스타"
                       onChange={(e) => setForm({ ...form, refName: e.target.value })} />
                     {(() => { try { return localStorage.getItem("ref_code") ? <div className="note" style={{ marginTop: 4 }}>🎁 추천 링크로 접속하셨네요 — 추천인이 자동으로 연결됩니다!</div> : null; } catch (e) { return null; } })()}
                   </div>
