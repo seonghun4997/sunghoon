@@ -441,7 +441,7 @@ export default function Home() {
 
     network: (
       <section className="card" key="network">
-        <div className="sechead"><h2>인맥</h2><span className="en">NETWORK</span></div>
+        <div className="sechead"><h2>네트워킹</h2><span className="en">NETWORK</span></div>
         {T.netDesc?.trim() && <div className="desc">{T.netDesc}</div>}
         {!viewer ? (
           <div className="tease">
@@ -600,11 +600,11 @@ export default function Home() {
         <div className="inner">
           {subDone ? (
             <div className="msg" style={{ textAlign: "center", width: "100%" }}>
-              <b className="inline">✓ 구독 접수 완료</b> — 등록되면 인맥 칸에 표시됩니다
+              <b className="inline">✓ 구독 접수 완료</b> — 등록되면 네트워킹 칸에 표시됩니다
             </div>
           ) : (
             <>
-              <div className="msg"><b>새 사업 · 인맥 소식 받기</b>구독하면 인맥 칸에 등록됩니다</div>
+              <div className="msg"><b>새 사업 · 네트워킹 소식 받기</b>구독하면 네트워킹 칸에 등록됩니다</div>
               <button className="mp" onClick={openSub}>📡 구독하기</button>
             </>
           )}
@@ -620,7 +620,7 @@ export default function Home() {
               <h2 style={{ fontSize: 17 }}>내 소개 수정</h2>
               <span className="en" style={{ color: "var(--gold)" }}>MY PROFILE</span>
             </div>
-            <div className="desc">인맥 칸에 공개되는 내 모습이에요. 이름·연락처는 계속 비공개입니다.</div>
+            <div className="desc">네트워킹 칸에 공개되는 내 모습이에요. 이름·연락처는 계속 비공개입니다.</div>
             <div className="fgroup">
               <div className="flabel">아이콘</div>
               <div className="iconpick">

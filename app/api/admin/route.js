@@ -288,7 +288,7 @@ export async function POST(req) {
       const dg = String(before.phone || "").replace(/\D/g, "");
       sms = await sendSMS(
         dg,
-        `[전성훈 상태창] ${before.name}님, 구독 등록이 완료됐습니다! 앞으로 사업·인맥 소식을 보내드릴게요.\n\n사이트방문:\n${SITE}\n\n구독 취소:\n${SITE}/bye?p=${dg}&t=${unsubToken(dg)}`
+        `[전성훈 상태창] ${before.name}님, 구독 등록이 완료됐습니다! 앞으로 사업·네트워킹 소식을 보내드릴게요.\n\n사이트방문:\n${SITE}\n\n구독 취소:\n${SITE}/bye?p=${dg}&t=${unsubToken(dg)}`
       );
       if (!sms.skipped) await logSms(client, { kind: "welcome", to_count: 1, targets: (before.name || "") + " …" + dg.slice(-4), body: "환영 문자 (등록 완료 안내)", ok: !!sms.ok, detail: smsDetail(sms) });
     }
