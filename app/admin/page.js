@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import { SECTION_LABELS, mergeConfig, BUILD, CANONICAL_HOST, NET_CATS, autoCat } from "@/lib/config";
+import CompanySwitcher from "../company-switcher"; // 디깅코퍼레이션 사업체 스위처
 
 // 오류 시 진단 페이지로 바로 가는 링크 — 캡처해서 보내면 원인 파악 가능
 function DiagLink() {
@@ -586,6 +587,7 @@ export default function Admin() {
                 {badge > 0 && <b className="admnav-badge">{badge}</b>}
               </a>
             ))}
+            <div style={{ marginLeft: "auto" }}><CompanySwitcher /></div>
           </div>
 
           {/* ★ v66: 승인 대기 알림 배너 — 제일 자주 하는 일을 맨 위에 */}
